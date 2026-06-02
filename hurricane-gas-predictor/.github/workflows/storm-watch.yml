@@ -1,0 +1,61 @@
+name: Storm Watch
+
+on:
+  schedule:
+    # Every 6 hours, June through November (Atlantic hurricane season)
+    - cron: '0 */6 * 6-11 *'
+  workflow_dispatch:
+
+jobs:
+  poll-nhc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Poll NHC and trigger Databricks ETL if active storm
+        env:
+          NHC_RSS_URL: ${{ secrets.NHC_RSS_URL }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_JOB_ID_ETL: ${{ secrets.DATABRICKS_JOB_ID_ETL }}
+        run: |
+          python - <<'EOF'
+          import os
+          import httpx
+          import xml.etree.ElementTree as ET
+
+          rss_url = os.getenv("NHC_RSS_URL", "https://www.nhc.noaa.gov/nhc_at1.xml")
+          resp = httpx.get(rss_url, timeout=30)
+          resp.raise_for_status()
+
+          root = ET.fromstring(resp.text)
+          items = root.findall(".//item")
+          active = len(items) > 0
+          print(f"NHC feed items: {len(items)} — active storms: {active}")
+
+          if not active:
+              print("No active storms — skipping Databricks trigger")
+              raise SystemExit(0)
+
+          host = os.environ["DATABRICKS_HOST"]
+          token = os.environ["DATABRICKS_TOKEN"]
+          job_id = int(os.environ["DATABRICKS_JOB_ID_ETL"])
+
+          trigger = httpx.post(
+              f"{host}/api/2.1/jobs/run-now",
+              headers={"Authorization": f"Bearer {token}"},
+              json={"job_id": job_id},
+              timeout=30,
+          )
+          trigger.raise_for_status()
+          run_id = trigger.json().get("run_id")
+          print(f"Triggered ETL job {job_id} — run_id: {run_id}")
+          EOF

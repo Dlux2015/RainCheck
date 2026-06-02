@@ -1,0 +1,15 @@
+pyspark
+delta-spark
+xgboost
+mlflow
+fastapi
+uvicorn[standard]
+supabase
+httpx
+geopandas
+shapely
+pandas
+numpy
+scikit-learn
+python-dotenv
+pytest

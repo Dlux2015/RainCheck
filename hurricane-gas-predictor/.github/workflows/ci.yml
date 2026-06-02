@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        env:
+          ZYLA_API_KEY: test-key
+          DATABRICKS_HOST: https://test.databricks.com
+          DATABRICKS_TOKEN: test-token
+          DATABRICKS_JOB_ID_ETL: "1"
+          DATABRICKS_JOB_ID_SIGNAL: "2"
+          SUPABASE_URL: https://test.supabase.co
+          SUPABASE_KEY: test-key
+          NHC_RSS_URL: https://www.nhc.noaa.gov/nhc_at1.xml
+        run: pytest tests/ -v --tb=short

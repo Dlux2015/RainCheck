@@ -1,0 +1,41 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Delta Lake
+.delta/
+
+# Raw data (large binary/parquet files not for version control)
+/data/raw/
+
+# MLflow runs
+mlruns/
+mlartifacts/
+
+# Model artifacts (JSON)
+models/*.json
+*.model.json
+runs/*/artifacts/*.json
+
+# Node / frontend
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

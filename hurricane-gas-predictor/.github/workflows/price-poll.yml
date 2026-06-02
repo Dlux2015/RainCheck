@@ -1,0 +1,73 @@
+name: Gas Price Poll
+
+on:
+  schedule:
+    # Every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  poll-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx supabase
+
+      - name: Check storm flag and poll Zyla if active
+        env:
+          ZYLA_API_KEY: ${{ secrets.ZYLA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python - <<'EOF'
+          import os
+          import httpx
+          from datetime import datetime, timezone
+          from supabase import create_client
+
+          sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+
+          flag_resp = (
+              sb.table("storm_flags")
+                .select("active")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+          )
+          storm_active = flag_resp.data[0]["active"] if flag_resp.data else False
+          print(f"Storm active flag: {storm_active}")
+
+          if not storm_active:
+              print("No active storm — skipping price poll")
+              raise SystemExit(0)
+
+          api_key = os.environ["ZYLA_API_KEY"]
+          resp = httpx.get(
+              "https://zylalabs.com/api/392/us+gas+prices+api/1016/get+gas+prices",
+              headers={"Authorization": f"Bearer {api_key}"},
+              params={"region": "gulf-coast"},
+              timeout=30,
+          )
+          resp.raise_for_status()
+          prices = resp.json() if isinstance(resp.json(), list) else [resp.json()]
+
+          now = datetime.now(timezone.utc).isoformat()
+          rows = [
+              {
+                  "region": p.get("region", "gulf-coast"),
+                  "grade": p.get("grade", "regular"),
+                  "price_usd": float(p.get("price", 0)),
+                  "ingested_at": now,
+              }
+              for p in prices
+          ]
+          sb.table("gas_prices").insert(rows).execute()
+          print(f"Inserted {len(rows)} price record(s) to Supabase")
+          EOF
