@@ -2,7 +2,7 @@ const FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', y
 
 function Metric({ label, value, sub }) {
   return (
-    <div style={{ padding: '12px 20px', background: '#f1f5f9', borderRadius: 8, minWidth: 140 }}>
+    <div style={{ padding: '12px 20px', minWidth: 140 }}>
       <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {label}
       </div>
@@ -25,7 +25,7 @@ export default function MetricRow({ storms = [], prices = [] }) {
     : null
 
   return (
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
       <Metric label="Active Storms" value={activeStorms} sub={activeStorms === 0 ? 'Off-season / clear' : `${activeStorms} active`} />
       <Metric label="Max Wind (kt)" value={maxWind} sub={maxWind ? 'Current advisory' : 'No active storm'} />
       <Metric label="Regular Gas (Gulf)" value={latestPrice} sub={latestPriceDate} />
