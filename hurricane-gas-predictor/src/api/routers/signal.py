@@ -22,10 +22,13 @@ class SignalRequest(BaseModel):
 
 @router.post("/")
 def get_signal(req: SignalRequest):
-    """Return BUY or WAIT signal for the provided feature values."""
+    """Return BUY or WAIT signal and persist it to Supabase."""
     try:
         from src.ml.predict import predict
-        return predict(req.model_dump())
+        from src.ml.signal_writer import write_signal
+        result = predict(req.model_dump())
+        write_signal(result)
+        return result
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
