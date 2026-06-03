@@ -53,6 +53,7 @@ def train(params: dict | None = None) -> str:
     if params is None:
         params = DEFAULT_PARAMS
 
+    mlflow.set_registry_uri("databricks-uc")
     spark = SparkSession.builder.appName("xgb_train").getOrCreate()
     X, y = load_features(spark)
     if len(X) < 10:

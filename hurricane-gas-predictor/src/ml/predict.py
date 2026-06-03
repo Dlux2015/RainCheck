@@ -23,6 +23,7 @@ FEATURE_COLS = [
 
 
 def load_model():
+    mlflow.set_registry_uri("databricks-uc")
     return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}@{MODEL_ALIAS}")
 
 
