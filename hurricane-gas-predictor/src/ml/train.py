@@ -3,6 +3,7 @@
 import mlflow
 import mlflow.xgboost
 from mlflow import MlflowClient
+from mlflow.models import infer_signature
 import numpy as np
 import xgboost as xgb
 from pyspark.sql import SparkSession
@@ -71,7 +72,8 @@ def train(params: dict | None = None) -> str:
         f1 = f1_score(y_test, (probs >= 0.5).astype(int))
         mlflow.log_metrics({"auc": auc, "f1": f1})
 
-        mlflow.xgboost.log_model(model, artifact_path="model")
+        signature = infer_signature(X_train, model.predict_proba(X_train)[:, 1])
+        mlflow.xgboost.log_model(model, artifact_path="model", signature=signature)
         mv = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
 
         # UC uses aliases instead of stages — mark this version as champion
