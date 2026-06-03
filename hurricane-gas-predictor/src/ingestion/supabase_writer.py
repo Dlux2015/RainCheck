@@ -107,8 +107,10 @@ def push_gas_prices(spark: SparkSession, silver_path: str = DELTA_SILVER_PRICES)
         for _, row in df.iterrows()
         if row["price_usd"] is not None
     ]
-    # Upsert on (series, period) — safe to re-run; no duplicate rows across ETL runs
-    _upsert(url, key, "gas_prices", rows, on_conflict="series,period")
+    # INSERT ... ON CONFLICT DO NOTHING — works with any unique index, no constraint name needed
+    h = {**_headers(key), "Prefer": "resolution=ignore-duplicates,return=minimal"}
+    resp = requests.post(f"{url}/rest/v1/gas_prices", headers=h, json=rows)
+    resp.raise_for_status()
     print(f"Upserted {len(rows)} gas price records to Supabase")
 
 
