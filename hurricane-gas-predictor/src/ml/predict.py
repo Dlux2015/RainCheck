@@ -6,8 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL_NAME = "hurricane-gas-signal"
-MODEL_STAGE = "Production"
+# Unity Catalog requires 3-part name and alias syntax (stages are unsupported)
+MODEL_NAME = "workspace.default.hurricane-gas-signal"
+MODEL_ALIAS = "champion"
 BUY_THRESHOLD = 0.65
 
 FEATURE_COLS = [
@@ -21,7 +22,7 @@ FEATURE_COLS = [
 
 
 def load_model():
-    return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}/{MODEL_STAGE}")
+    return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}@{MODEL_ALIAS}")
 
 
 def predict(features: dict) -> dict:

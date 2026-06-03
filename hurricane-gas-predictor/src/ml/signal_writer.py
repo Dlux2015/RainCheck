@@ -3,6 +3,7 @@
 import os
 
 import requests
+from mlflow.exceptions import MlflowException
 from pyspark.sql import SparkSession
 from dotenv import load_dotenv
 
@@ -70,9 +71,12 @@ def run(spark: SparkSession | None = None) -> None:
         print("No gold features available — skipping signal generation")
         return
 
-    from src.ml.predict import predict
-    result = predict(features)
-    write_signal(result)
+    try:
+        from src.ml.predict import predict
+        result = predict(features)
+        write_signal(result)
+    except MlflowException as e:
+        print(f"No trained model available yet — skipping signal: {e}")
 
 
 if __name__ == "__main__":

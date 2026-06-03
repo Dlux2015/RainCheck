@@ -2,6 +2,7 @@
 
 import mlflow
 import mlflow.xgboost
+from mlflow import MlflowClient
 import numpy as np
 import xgboost as xgb
 from pyspark.sql import SparkSession
@@ -12,7 +13,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GOLD_PATH = "/Volumes/workspace/default/raincheck/delta/gold/features"
-MODEL_NAME = "hurricane-gas-signal"
+# Unity Catalog requires 3-part name; alias replaces stage
+MODEL_NAME = "workspace.default.hurricane-gas-signal"
+MODEL_ALIAS = "champion"
 
 FEATURE_COLS = [
     "max_wind_kt",
@@ -44,7 +47,7 @@ def load_features(spark: SparkSession) -> tuple[np.ndarray, np.ndarray]:
 
 
 def train(params: dict | None = None) -> str:
-    """Train model, log to MLflow, register, and return run_id."""
+    """Train model, log to MLflow, register with champion alias, return run_id."""
     if params is None:
         params = DEFAULT_PARAMS
 
@@ -52,7 +55,6 @@ def train(params: dict | None = None) -> str:
     X, y = load_features(spark)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # MLflow logs every training run before model registration
     with mlflow.start_run() as run:
         mlflow.log_params(params)
 
@@ -65,9 +67,13 @@ def train(params: dict | None = None) -> str:
         mlflow.log_metrics({"auc": auc, "f1": f1})
 
         mlflow.xgboost.log_model(model, artifact_path="model")
-        mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
+        mv = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
+
+        # UC uses aliases instead of stages — mark this version as champion
+        MlflowClient().set_registered_model_alias(MODEL_NAME, MODEL_ALIAS, mv.version)
 
         print(f"Run {run.info.run_id} — AUC: {auc:.4f}  F1: {f1:.4f}")
+        print(f"Registered {MODEL_NAME} v{mv.version} @{MODEL_ALIAS}")
         return run.info.run_id
 
 
