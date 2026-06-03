@@ -1,11 +1,11 @@
 """Ingest Gulf Coast gas price data from EIA Open Data API into Delta Lake bronze layer."""
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, FloatType, TimestampType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,13 +19,15 @@ EIA_SERIES = {
     "premium":  "EMM_EPMP_PTE_R30_DPG",
 }
 
+# DoubleType (float64) for price_usd — EIA returns 4+ decimal places and
+# FloatType (float32) loses precision on values like 3.852999... → 3.853001
 BRONZE_SCHEMA = StructType([
-    StructField("period", StringType(), True),
-    StructField("series", StringType(), True),
-    StructField("region", StringType(), True),
-    StructField("grade", StringType(), True),
-    StructField("price_usd", FloatType(), True),
-    StructField("source_url", StringType(), True),
+    StructField("period",      StringType(),    True),
+    StructField("series",      StringType(),    True),
+    StructField("region",      StringType(),    True),
+    StructField("grade",       StringType(),    True),
+    StructField("price_usd",   DoubleType(),    True),
+    StructField("source_url",  StringType(),    True),
     StructField("ingested_at", TimestampType(), False),
 ])
 
@@ -35,20 +37,20 @@ def fetch_gas_prices(region: str = "gulf-coast") -> list[dict]:
     if not api_key:
         raise EnvironmentError("EIA_API_KEY is not set")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     records = []
 
     for grade, series_id in EIA_SERIES.items():
         response = httpx.get(
             EIA_BASE_URL,
             params={
-                "api_key": api_key,
-                "frequency": "weekly",
-                "data[]": "value",
-                "facets[series][]": series_id,
-                "sort[0][column]": "period",
+                "api_key":            api_key,
+                "frequency":          "weekly",
+                "data[]":             "value",
+                "facets[series][]":   series_id,
+                "sort[0][column]":    "period",
                 "sort[0][direction]": "desc",
-                "length": 104,  # 2 years of weekly history; silver dedup prevents duplicates
+                "length":             104,  # 2 years; silver dedup prevents duplicates
             },
             timeout=30,
         )
@@ -61,12 +63,12 @@ def fetch_gas_prices(region: str = "gulf-coast") -> list[dict]:
             if raw_value is None:
                 continue
             records.append({
-                "period": row["period"],
-                "series": series_id,
-                "region": region,
-                "grade": grade,
-                "price_usd": float(raw_value),
-                "source_url": EIA_BASE_URL,
+                "period":      row["period"],
+                "series":      series_id,
+                "region":      region,
+                "grade":       grade,
+                "price_usd":   float(raw_value),
+                "source_url":  EIA_BASE_URL,
                 "ingested_at": now,
             })
 

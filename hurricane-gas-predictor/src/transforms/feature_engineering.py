@@ -14,9 +14,10 @@ def build_features(
     storms = spark.read.format("delta").load(silver_storms)
     prices = spark.read.format("delta").load(silver_prices)
 
-    # Partition by grade so each fuel type gets its own independent rolling window
-    price_window = Window.partitionBy("region", "grade").orderBy(F.col("period").cast("timestamp")).rowsBetween(-6, 0)
-    lag_window = Window.partitionBy("region", "grade").orderBy(F.col("period").cast("timestamp"))
+    # period is DateType in silver — directly orderable, no cast needed.
+    # Partition by (region, grade) so each fuel type gets its own independent rolling window.
+    price_window = Window.partitionBy("region", "grade").orderBy("period").rowsBetween(-6, 0)
+    lag_window   = Window.partitionBy("region", "grade").orderBy("period")
 
     prices_featured = (
         prices
@@ -28,10 +29,11 @@ def build_features(
         )
     )
 
-    # Aggregate storm activity by calendar week to align with weekly price data
+    # Align storms to calendar weeks using pub_date (NHC advisory timestamp),
+    # which is more accurate than ingested_at (poll time).
     storm_agg = (
         storms
-        .withColumn("week", F.date_trunc("week", F.col("ingested_at")))
+        .withColumn("week", F.date_trunc("week", F.col("pub_date")))
         .groupBy("week")
         .agg(
             F.max("wind_speed_kt").alias("max_wind_kt"),
@@ -41,12 +43,12 @@ def build_features(
         )
     )
 
-    # Join weekly prices to storm activity for the same calendar week;
-    # fill 0 for weeks with no active storms (no storm → no wind, no count)
+    # storm_agg is always tiny (≤ a few hundred rows across a full season).
+    # Broadcast it so Spark avoids a sort-merge join shuffle on prices_featured.
     features = (
         prices_featured
-        .withColumn("week", F.date_trunc("week", F.col("period").cast("timestamp")))
-        .join(storm_agg, "week", "left")
+        .withColumn("week", F.date_trunc("week", F.col("period")))
+        .join(F.broadcast(storm_agg), "week", "left")
         .fillna(0, subset=["max_wind_kt", "active_storm_count", "storm_centroid_lat", "storm_centroid_lon"])
         .withColumn("label", F.when(F.col("price_pct_change") > 0.03, 1).otherwise(0))
     )

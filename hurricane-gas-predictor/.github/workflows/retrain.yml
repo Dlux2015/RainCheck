@@ -1,0 +1,72 @@
+name: Monthly Model Retrain
+
+on:
+  schedule:
+    # 1st of every month at 02:00 UTC — retrain as fresh price history accumulates
+    - cron: '0 2 1 * *'
+  workflow_dispatch:
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Trigger Databricks ETL then training job
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_JOB_ID_ETL: ${{ secrets.DATABRICKS_JOB_ID_ETL }}
+          DATABRICKS_JOB_ID_SIGNAL: ${{ secrets.DATABRICKS_JOB_ID_SIGNAL }}
+        run: |
+          python - <<'EOF'
+          import os, httpx, time
+
+          host    = os.environ["DATABRICKS_HOST"].rstrip("/")
+          token   = os.environ["DATABRICKS_TOKEN"]
+          headers = {"Authorization": f"Bearer {token}"}
+
+          def trigger_and_wait(job_id: int, label: str) -> None:
+              r = httpx.post(
+                  f"{host}/api/2.1/jobs/run-now",
+                  headers=headers,
+                  json={"job_id": job_id},
+                  timeout=30,
+              )
+              r.raise_for_status()
+              run_id = r.json()["run_id"]
+              print(f"[{label}] triggered run_id={run_id}")
+
+              # Poll until terminal state (max 30 min)
+              for _ in range(60):
+                  time.sleep(30)
+                  status = httpx.get(
+                      f"{host}/api/2.1/jobs/runs/get",
+                      headers=headers,
+                      params={"run_id": run_id},
+                      timeout=30,
+                  ).json()
+                  state = status["state"]["life_cycle_state"]
+                  result = status["state"].get("result_state", "")
+                  print(f"  [{label}] {state} / {result}")
+                  if state == "TERMINATED":
+                      if result != "SUCCESS":
+                          raise RuntimeError(f"{label} run {run_id} ended with {result}")
+                      return
+                  if state in ("INTERNAL_ERROR", "SKIPPED"):
+                      raise RuntimeError(f"{label} run {run_id} ended with {state}")
+              raise TimeoutError(f"{label} run {run_id} did not finish within 30 minutes")
+
+          # Run ETL first to backfill latest prices, then retrain
+          trigger_and_wait(int(os.environ["DATABRICKS_JOB_ID_ETL"]),    "ETL")
+          trigger_and_wait(int(os.environ["DATABRICKS_JOB_ID_SIGNAL"]), "TRAIN")
+          print("Retraining complete — new @champion model registered")
+          EOF

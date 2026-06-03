@@ -4,15 +4,32 @@ import PriceChart from './components/PriceChart'
 import BuySignalCard from './components/BuySignalCard'
 import MetricRow from './components/MetricRow'
 
+// In production VITE_API_URL points to the deployed Railway/Render API.
+// In development the Vite proxy rewrites /api → localhost:8000.
+const API = import.meta.env.VITE_API_URL || '/api'
+
 export default function App() {
-  const [signal, setSignal] = useState(null)
-  const [prices, setPrices] = useState([])
-  const [storms, setStorms] = useState([])
+  const [signal, setSignal]   = useState(null)
+  const [prices, setPrices]   = useState({ regular: [], midgrade: [], premium: [] })
+  const [storms, setStorms]   = useState([])
 
   useEffect(() => {
-    fetch('/api/signal/latest').then(r => r.json()).then(setSignal).catch(console.error)
-    fetch('/api/prices/history?days=14').then(r => r.json()).then(d => setPrices(d.prices ?? [])).catch(console.error)
-    fetch('/api/storm/active').then(r => r.json()).then(d => setStorms(d.storms ?? [])).catch(console.error)
+    fetch(`${API}/signal/latest`).then(r => r.json()).then(setSignal).catch(console.error)
+    fetch(`${API}/storm/active`).then(r => r.json()).then(d => setStorms(d.storms ?? [])).catch(console.error)
+
+    // Fetch all three grades in parallel — 2 years of weekly history
+    Promise.all(
+      ['regular', 'midgrade', 'premium'].map(grade =>
+        fetch(`${API}/prices/history?grade=${grade}&days=730`)
+          .then(r => r.json())
+          .then(d => ({ grade, data: d.prices ?? [] }))
+          .catch(() => ({ grade, data: [] }))
+      )
+    ).then(results => {
+      const byGrade = {}
+      results.forEach(({ grade, data }) => { byGrade[grade] = data })
+      setPrices(byGrade)
+    })
   }, [])
 
   return (
@@ -22,7 +39,7 @@ export default function App() {
         Optimal gas buying windows during Atlantic hurricane events
       </p>
       {signal && <BuySignalCard signal={signal} />}
-      <MetricRow storms={storms} prices={prices} />
+      <MetricRow storms={storms} prices={prices.regular} />
       <StormMap storms={storms} />
       <PriceChart prices={prices} />
     </div>

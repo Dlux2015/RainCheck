@@ -2,7 +2,7 @@ name: Gas Price Poll
 
 on:
   schedule:
-    # Every 30 minutes
+    # Every 30 minutes year-round — prices matter even without active storms
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
@@ -18,71 +18,71 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install httpx supabase
+        run: pip install httpx
 
-      - name: Check storm flag and poll EIA if active
+      - name: Fetch latest EIA prices and upsert to Supabase
         env:
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           python - <<'EOF'
-          import os
-          import httpx
+          import os, httpx
           from datetime import datetime, timezone
-          from supabase import create_client
 
-          sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-
-          flag_resp = (
-              sb.table("storm_flags")
-                .select("active")
-                .order("created_at", desc=True)
-                .limit(1)
-                .execute()
-          )
-          storm_active = flag_resp.data[0]["active"] if flag_resp.data else False
-          print(f"Storm active flag: {storm_active}")
-
-          if not storm_active:
-              print("No active storm — skipping price poll")
-              raise SystemExit(0)
-
-          api_key = os.environ["EIA_API_KEY"]
-          eia_base = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
-          series = {
+          EIA_BASE = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
+          SERIES = {
               "regular":  "EMM_EPMRR_PTE_R30_DPG",
               "midgrade": "EMM_EPMM_PTE_R30_DPG",
               "premium":  "EMM_EPMP_PTE_R30_DPG",
           }
+          SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+          SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+          EIA_KEY      = os.environ["EIA_API_KEY"]
 
-          now = datetime.now(timezone.utc).isoformat()
+          # Use requests-style headers — avoids supabase Python client
+          # and its typing_extensions dependency
+          sb_headers = {
+              "apikey": SUPABASE_KEY,
+              "Authorization": f"Bearer {SUPABASE_KEY}",
+              "Content-Type": "application/json",
+              "Prefer": "resolution=ignore-duplicates,return=minimal",
+          }
+
+          now  = datetime.now(timezone.utc).isoformat()
           rows = []
-          for grade, series_id in series.items():
-              resp = httpx.get(
-                  eia_base,
-                  params={
-                      "api_key": api_key,
-                      "frequency": "weekly",
-                      "data[]": "value",
-                      "facets[series][]": series_id,
-                      "sort[0][column]": "period",
-                      "sort[0][direction]": "desc",
-                      "length": 1,
-                  },
-                  timeout=30,
-              )
+
+          for grade, series_id in SERIES.items():
+              resp = httpx.get(EIA_BASE, params={
+                  "api_key":             EIA_KEY,
+                  "frequency":           "weekly",
+                  "data[]":              "value",
+                  "facets[series][]":    series_id,
+                  "sort[0][column]":     "period",
+                  "sort[0][direction]":  "desc",
+                  "length":              1,
+              }, timeout=30)
               resp.raise_for_status()
               data = resp.json().get("response", {}).get("data", [])
-              if data:
+              if data and data[0].get("value") is not None:
                   rows.append({
-                      "region": "gulf-coast",
-                      "grade": grade,
-                      "price_usd": float(data[0]["value"]),
+                      "region":      "gulf-coast",
+                      "grade":       grade,
+                      "series":      series_id,
+                      "period":      data[0]["period"],           # "YYYY-MM-DD"
+                      "price_usd":   float(data[0]["value"]),
                       "ingested_at": now,
                   })
 
-          if rows:
-              sb.table("gas_prices").insert(rows).execute()
-              print(f"Inserted {len(rows)} price record(s) to Supabase")
+          if not rows:
+              print("No price data returned from EIA")
+              raise SystemExit(0)
+
+          r = httpx.post(
+              f"{SUPABASE_URL}/rest/v1/gas_prices",
+              headers=sb_headers,
+              json=rows,
+          )
+          r.raise_for_status()
+          print(f"Upserted {len(rows)} price record(s) — periods: {[r['period'] for r in rows]}")
           EOF

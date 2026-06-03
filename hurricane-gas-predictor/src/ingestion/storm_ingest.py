@@ -2,7 +2,7 @@
 
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from pyspark.sql import SparkSession
@@ -51,7 +51,7 @@ def parse_nhc_feed(xml_text: str) -> list[dict]:
     if channel is None:
         return records
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for item in channel.findall("item"):
         title = item.findtext("title", default="")
 

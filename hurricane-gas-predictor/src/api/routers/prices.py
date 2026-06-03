@@ -25,7 +25,7 @@ def _headers() -> dict:
 def get_price_history(
     region: str = Query(default="gulf-coast"),
     grade: str = Query(default="regular"),
-    days: int = Query(default=90, ge=1, le=730),
+    days: int = Query(default=90, ge=1, le=730),  # noqa: up to 2 years
 ):
     """Return gas price time series for a region and grade."""
     try:

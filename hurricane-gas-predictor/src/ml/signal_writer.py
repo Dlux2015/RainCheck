@@ -26,6 +26,7 @@ def _latest_features(spark: SparkSession) -> dict | None:
         spark.read.format("delta").load(GOLD_PATH)
              .orderBy("week", ascending=False)
              .limit(1)
+             .select(*FEATURE_COLS)   # pull only the columns needed — avoids dragging all gold cols to driver
              .toPandas()
     )
     if df.empty:

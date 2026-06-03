@@ -26,36 +26,40 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_JOB_ID_ETL: ${{ secrets.DATABRICKS_JOB_ID_ETL }}
+          DATABRICKS_JOB_ID_SIGNAL: ${{ secrets.DATABRICKS_JOB_ID_SIGNAL }}
         run: |
           python - <<'EOF'
-          import os
-          import httpx
-          import xml.etree.ElementTree as ET
+          import os, httpx, xml.etree.ElementTree as ET
 
           rss_url = os.getenv("NHC_RSS_URL", "https://www.nhc.noaa.gov/nhc_at1.xml")
           resp = httpx.get(rss_url, timeout=30)
           resp.raise_for_status()
 
           root = ET.fromstring(resp.text)
-          items = root.findall(".//item")
-          active = len(items) > 0
-          print(f"NHC feed items: {len(items)} — active storms: {active}")
+          # Filter out the off-season placeholder — it always has exactly one item
+          # with "no current storm" in the title even when there is no active storm.
+          active_items = [
+              i for i in root.findall(".//item")
+              if "no current storm" not in (i.findtext("title") or "").lower()
+          ]
+          print(f"NHC feed: {len(active_items)} active storm item(s)")
 
-          if not active:
+          if not active_items:
               print("No active storms — skipping Databricks trigger")
               raise SystemExit(0)
 
-          host = os.environ["DATABRICKS_HOST"]
+          host  = os.environ["DATABRICKS_HOST"].rstrip("/")
           token = os.environ["DATABRICKS_TOKEN"]
-          job_id = int(os.environ["DATABRICKS_JOB_ID_ETL"])
+          headers = {"Authorization": f"Bearer {token}"}
 
-          trigger = httpx.post(
-              f"{host}/api/2.1/jobs/run-now",
-              headers={"Authorization": f"Bearer {token}"},
-              json={"job_id": job_id},
-              timeout=30,
-          )
-          trigger.raise_for_status()
-          run_id = trigger.json().get("run_id")
-          print(f"Triggered ETL job {job_id} — run_id: {run_id}")
+          for job_key in ("DATABRICKS_JOB_ID_ETL", "DATABRICKS_JOB_ID_SIGNAL"):
+              job_id = int(os.environ[job_key])
+              r = httpx.post(
+                  f"{host}/api/2.1/jobs/run-now",
+                  headers=headers,
+                  json={"job_id": job_id},
+                  timeout=30,
+              )
+              r.raise_for_status()
+              print(f"Triggered job {job_id} (run_id={r.json().get('run_id')})")
           EOF

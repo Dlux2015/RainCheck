@@ -14,7 +14,8 @@ def clean_storms(
         df
         # Deduplicate by advisory identity, not ingestion time
         .dropDuplicates(["storm_id", "pub_date"])
-        .filter(F.col("storm_id").isNotNull())
+        # Filter null and empty-string storm IDs (malformed or off-season guids)
+        .filter(F.col("storm_id").isNotNull() & (F.col("storm_id") != ""))
         # NHC encodes lat/lon as "22.5N" / "85.0W" — strip compass letter and sign correctly
         .withColumn("_lat_num", F.regexp_extract("lat", r"([0-9.]+)", 1).cast("double"))
         .withColumn("lat", F.when(F.col("lat").contains("S"), -F.col("_lat_num")).otherwise(F.col("_lat_num")))
@@ -23,6 +24,7 @@ def clean_storms(
         .withColumn("lon", F.when(F.col("lon").contains("W"), -F.col("_lon_num")).otherwise(F.col("_lon_num")))
         .drop("_lon_num")
         .withColumn("wind_speed_kt", F.col("wind_speed_kt").cast("integer"))
+        # NHC pubDate format: "Wed, 03 Jun 2026 04:07:22 GMT"
         .withColumn("pub_date", F.to_timestamp("pub_date", "EEE, dd MMM yyyy HH:mm:ss z"))
         .withColumn("processed_at", F.current_timestamp())
         .drop("raw_xml")
@@ -42,7 +44,9 @@ def clean_gas_prices(
         # Deduplicate by the actual price period, not ingestion time
         .dropDuplicates(["series", "period"])
         .filter(F.col("price_usd") > 0)
-        .withColumn("period", F.to_date("period"))
+        .withColumn("period",    F.to_date("period"))
+        # Ensure DoubleType precision is preserved after schema change in bronze
+        .withColumn("price_usd", F.col("price_usd").cast("double"))
         .withColumn("processed_at", F.current_timestamp())
     )
     silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(silver_path)
