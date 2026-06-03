@@ -53,6 +53,11 @@ def train(params: dict | None = None) -> str:
 
     spark = SparkSession.builder.appName("xgb_train").getOrCreate()
     X, y = load_features(spark)
+    if len(X) < 10:
+        raise ValueError(
+            f"Training set has only {len(X)} rows after dropna — need at least 10. "
+            "Run the ETL job first to populate gold features."
+        )
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     with mlflow.start_run() as run:

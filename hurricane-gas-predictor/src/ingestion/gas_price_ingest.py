@@ -48,30 +48,27 @@ def fetch_gas_prices(region: str = "gulf-coast") -> list[dict]:
                 "facets[series][]": series_id,
                 "sort[0][column]": "period",
                 "sort[0][direction]": "desc",
-                "length": 1,
+                "length": 104,  # 2 years of weekly history; silver dedup prevents duplicates
             },
             timeout=30,
         )
         response.raise_for_status()
         data = response.json().get("response", {}).get("data", [])
 
-        if not data:
-            continue
-
-        # EIA returns value as a string; skip null gaps in the series
-        raw_value = data[0].get("value")
-        if raw_value is None:
-            continue
-
-        records.append({
-            "period": data[0]["period"],
-            "series": series_id,
-            "region": region,
-            "grade": grade,
-            "price_usd": float(raw_value),
-            "source_url": EIA_BASE_URL,
-            "ingested_at": now,
-        })
+        for row in data:
+            # EIA returns value as a string; skip null gaps in the series
+            raw_value = row.get("value")
+            if raw_value is None:
+                continue
+            records.append({
+                "period": row["period"],
+                "series": series_id,
+                "region": region,
+                "grade": grade,
+                "price_usd": float(raw_value),
+                "source_url": EIA_BASE_URL,
+                "ingested_at": now,
+            })
 
     return records
 
