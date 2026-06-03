@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GOLD_PATH = "/tmp/delta/gold/features"
+GOLD_PATH = "file:///tmp/delta/gold/features"
 FEATURE_COLS = [
     "max_wind_kt",
     "active_storm_count",

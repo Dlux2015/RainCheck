@@ -9,7 +9,7 @@ from pyspark.sql import functions as F
 
 def build_refinery_geodataframe(
     spark: SparkSession,
-    silver_path: str = "/tmp/delta/silver/refineries",
+    silver_path: str = "file:///tmp/delta/silver/refineries",
 ) -> gpd.GeoDataFrame:
     df = spark.read.format("delta").load(silver_path).toPandas()
     return gpd.GeoDataFrame(
@@ -39,7 +39,7 @@ def find_at_risk_refineries(
     """Return refinery_ids within radius_km of any point on the storm track."""
     storms_df = (
         spark.read.format("delta")
-             .load("/tmp/delta/silver/storms")
+             .load("file:///tmp/delta/silver/storms")
              .filter(F.col("storm_id") == storm_id)
              .toPandas()
     )

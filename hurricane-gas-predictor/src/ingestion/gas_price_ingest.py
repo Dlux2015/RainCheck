@@ -84,7 +84,7 @@ def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> N
     df.write.format("delta").mode("append").save(delta_path)
 
 
-def run(delta_path: str = "/tmp/delta/bronze/gas_prices") -> None:
+def run(delta_path: str = "file:///tmp/delta/bronze/gas_prices") -> None:
     spark = SparkSession.builder.appName("eia_gas_ingest").getOrCreate()
     records = fetch_gas_prices()
     write_bronze(records, spark, delta_path)
