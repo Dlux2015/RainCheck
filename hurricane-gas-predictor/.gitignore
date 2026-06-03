@@ -42,3 +42,4 @@ build/
 
 # Local reference docs — not for version control
 Future Measures/
+*.png
