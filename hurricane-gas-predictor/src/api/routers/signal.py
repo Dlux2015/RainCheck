@@ -2,6 +2,7 @@
 
 import os
 
+import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -9,6 +10,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 router = APIRouter()
+
+
+def _sb(table: str) -> str:
+    return f"{os.getenv('SUPABASE_URL')}/rest/v1/{table}"
+
+
+def _headers() -> dict:
+    key = os.getenv("SUPABASE_KEY", "")
+    return {"apikey": key, "Authorization": f"Bearer {key}"}
 
 
 class SignalRequest(BaseModel):
@@ -35,17 +45,15 @@ def get_signal(req: SignalRequest):
 
 @router.get("/latest")
 def get_latest_signal():
-    """Return the most recently persisted buy signal from Supabase."""
+    """Return the most recently persisted buy signal."""
     try:
-        from supabase import create_client
-        sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-        response = (
-            sb.table("signals")
-              .select("*")
-              .order("created_at", desc=True)
-              .limit(1)
-              .execute()
+        resp = requests.get(
+            _sb("signals"),
+            headers=_headers(),
+            params={"order": "created_at.desc", "limit": "1"},
         )
-        return response.data[0] if response.data else {"signal": "WAIT", "probability": 0.0}
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else {"signal": "WAIT", "probability": 0.0}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))

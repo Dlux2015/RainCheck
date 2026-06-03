@@ -2,8 +2,8 @@
 
 import os
 
+import requests
 from fastapi import APIRouter, HTTPException
-from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,21 +11,26 @@ load_dotenv()
 router = APIRouter()
 
 
-def _supabase() -> Client:
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        raise EnvironmentError("SUPABASE_URL and SUPABASE_KEY must be set")
-    return create_client(url, key)
+def _sb(table: str) -> str:
+    return f"{os.getenv('SUPABASE_URL')}/rest/v1/{table}"
+
+
+def _headers() -> dict:
+    key = os.getenv("SUPABASE_KEY", "")
+    return {"apikey": key, "Authorization": f"Bearer {key}"}
 
 
 @router.get("/active")
 def get_active_storms():
-    """Return all currently active Atlantic storms from Supabase."""
+    """Return all currently active Atlantic storms."""
     try:
-        sb = _supabase()
-        response = sb.table("storms").select("*").eq("active", True).execute()
-        return {"storms": response.data}
+        resp = requests.get(
+            _sb("storms"),
+            headers=_headers(),
+            params={"active": "eq.true"},
+        )
+        resp.raise_for_status()
+        return {"storms": resp.json()}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
@@ -34,14 +39,12 @@ def get_active_storms():
 def get_storm_track(storm_id: str):
     """Return ordered track points for a specific storm."""
     try:
-        sb = _supabase()
-        response = (
-            sb.table("storm_track")
-              .select("*")
-              .eq("storm_id", storm_id)
-              .order("recorded_at")
-              .execute()
+        resp = requests.get(
+            _sb("storm_track"),
+            headers=_headers(),
+            params={"storm_id": f"eq.{storm_id}", "order": "recorded_at.asc"},
         )
-        return {"storm_id": storm_id, "track": response.data}
+        resp.raise_for_status()
+        return {"storm_id": storm_id, "track": resp.json()}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))

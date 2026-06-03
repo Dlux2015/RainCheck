@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DELTA_SILVER_STORMS = "/Volumes/workspace/default/raincheck/delta/silver/storms"
+DELTA_SILVER_PRICES = "/Volumes/workspace/default/raincheck/delta/silver/gas_prices"
 
 
 def _headers(key: str) -> dict:
@@ -87,6 +88,30 @@ def push_storms(spark: SparkSession, silver_path: str = DELTA_SILVER_STORMS) -> 
     print(f"Appended {len(track_rows)} track point(s) to Supabase")
 
 
+def push_gas_prices(spark: SparkSession, silver_path: str = DELTA_SILVER_PRICES) -> None:
+    url, key = _creds()
+    df = spark.read.format("delta").load(silver_path).toPandas()
+    if df.empty:
+        print("No gas price records to push")
+        return
+
+    rows = [
+        {
+            "region": str(row["region"]),
+            "grade": str(row["grade"]),
+            "series": str(row["series"]),
+            "period": str(row["period"]),        # date → "YYYY-MM-DD" string
+            "price_usd": float(row["price_usd"]),
+            "ingested_at": _to_iso(row["ingested_at"]),
+        }
+        for _, row in df.iterrows()
+        if row["price_usd"] is not None
+    ]
+    # Upsert on (series, period) — safe to re-run; no duplicate rows across ETL runs
+    _upsert(url, key, "gas_prices", rows, on_conflict="series,period")
+    print(f"Upserted {len(rows)} gas price records to Supabase")
+
+
 def push_storm_flag(active: bool) -> None:
     url, key = _creds()
     _insert(url, key, "storm_flags", [{"active": active}])
@@ -99,6 +124,7 @@ def run(spark: SparkSession | None = None) -> None:
     df = spark.read.format("delta").load(DELTA_SILVER_STORMS).toPandas()
     push_storms(spark)
     push_storm_flag(active=not df.empty)
+    push_gas_prices(spark)
 
 
 if __name__ == "__main__":
