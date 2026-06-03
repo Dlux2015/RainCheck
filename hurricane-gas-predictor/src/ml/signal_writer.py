@@ -2,8 +2,8 @@
 
 import os
 
+import requests
 from pyspark.sql import SparkSession
-from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,13 +40,23 @@ def write_signal(signal_result: dict) -> None:
     if not url or not key:
         raise EnvironmentError("SUPABASE_URL and SUPABASE_KEY must be set")
 
-    sb = create_client(url, key)
-    sb.table("signals").insert({
-        "signal": signal_result["signal"],
-        "probability": signal_result["probability"],
-        "threshold": signal_result["threshold"],
-        "features": signal_result["features"],
-    }).execute()
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+    resp = requests.post(
+        f"{url}/rest/v1/signals",
+        headers=headers,
+        json={
+            "signal": signal_result["signal"],
+            "probability": signal_result["probability"],
+            "threshold": signal_result["threshold"],
+            "features": signal_result["features"],
+        },
+    )
+    resp.raise_for_status()
     print(f"Signal persisted: {signal_result['signal']} ({signal_result['probability']:.2%})")
 
 

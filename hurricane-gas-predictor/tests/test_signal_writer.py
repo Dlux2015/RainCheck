@@ -11,26 +11,24 @@ SAMPLE_RESULT = {
 }
 
 
-@patch("src.ml.signal_writer.create_client")
-def test_write_signal_inserts_to_supabase(mock_client, monkeypatch):
+@patch("src.ml.signal_writer.requests.post")
+def test_write_signal_inserts_to_supabase(mock_post, monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
-
-    mock_sb = MagicMock()
-    mock_client.return_value = mock_sb
+    mock_post.return_value = MagicMock(status_code=201)
+    mock_post.return_value.raise_for_status = MagicMock()
 
     from src.ml.signal_writer import write_signal
     write_signal(SAMPLE_RESULT)
 
-    mock_sb.table("signals").insert.assert_called_once()
-    inserted = mock_sb.table("signals").insert.call_args[0][0]
-    assert inserted["signal"] == "BUY"
-    assert inserted["probability"] == 0.72
+    mock_post.assert_called_once()
+    payload = mock_post.call_args[1]["json"]
+    assert payload["signal"] == "BUY"
+    assert payload["probability"] == 0.72
 
 
-@patch("src.ml.signal_writer.create_client")
-def test_write_signal_missing_env_raises(mock_client, monkeypatch):
-    # Remove from os.environ — write_signal reads them at call time via os.getenv()
+@patch("src.ml.signal_writer.requests.post")
+def test_write_signal_missing_env_raises(mock_post, monkeypatch):
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_KEY", raising=False)
 

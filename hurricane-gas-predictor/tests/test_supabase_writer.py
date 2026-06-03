@@ -18,34 +18,44 @@ SAMPLE_DF = pd.DataFrame([{
 }])
 
 
-@patch("src.ingestion.supabase_writer.create_client")
-def test_push_storm_flag_active(mock_client):
-    mock_sb = MagicMock()
-    mock_client.return_value = mock_sb
+@patch("src.ingestion.supabase_writer.requests.post")
+def test_push_storm_flag_active(mock_post, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    mock_post.return_value = MagicMock(status_code=201)
+    mock_post.return_value.raise_for_status = MagicMock()
     push_storm_flag(True)
-    mock_sb.table("storm_flags").insert.assert_called_once_with({"active": True})
+    mock_post.assert_called_once()
+    payload = mock_post.call_args[1]["json"]
+    assert payload == [{"active": True}]
 
 
-@patch("src.ingestion.supabase_writer.create_client")
-def test_push_storm_flag_inactive(mock_client):
-    mock_sb = MagicMock()
-    mock_client.return_value = mock_sb
+@patch("src.ingestion.supabase_writer.requests.post")
+def test_push_storm_flag_inactive(mock_post, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    mock_post.return_value = MagicMock(status_code=201)
+    mock_post.return_value.raise_for_status = MagicMock()
     push_storm_flag(False)
-    mock_sb.table("storm_flags").insert.assert_called_once_with({"active": False})
+    payload = mock_post.call_args[1]["json"]
+    assert payload == [{"active": False}]
 
 
-@patch("src.ingestion.supabase_writer.create_client")
-@patch("src.ingestion.supabase_writer.SparkSession")
-def test_push_storms_upserts_and_appends_track(mock_spark_cls, mock_client):
-    mock_sb = MagicMock()
-    mock_client.return_value = mock_sb
+@patch("src.ingestion.supabase_writer.requests.post")
+def test_push_storms_upserts_and_appends_track(mock_post, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    mock_post.return_value = MagicMock(status_code=201)
+    mock_post.return_value.raise_for_status = MagicMock()
 
     mock_spark = MagicMock()
-    mock_spark_cls.builder.appName.return_value.getOrCreate.return_value = mock_spark
     mock_spark.read.format.return_value.load.return_value.toPandas.return_value = SAMPLE_DF
 
     from src.ingestion.supabase_writer import push_storms
     push_storms(mock_spark)
 
-    mock_sb.table("storms").upsert.assert_called_once()
-    mock_sb.table("storm_track").insert.assert_called_once()
+    # Two POST calls: upsert storms + insert track
+    assert mock_post.call_count == 2
+    calls = [c[1]["json"] for c in mock_post.call_args_list]
+    assert calls[0][0]["storm_id"] == "AL012026"
+    assert calls[1][0]["storm_id"] == "AL012026"
