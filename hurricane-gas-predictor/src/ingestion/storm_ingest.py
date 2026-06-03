@@ -81,10 +81,8 @@ def parse_nhc_feed(xml_text: str) -> list[dict]:
 
 
 def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> None:
-    if not records:
-        return
+    # Always write even when empty — creates the Delta table so silver can always read it
     df = spark.createDataFrame(records, schema=BRONZE_SCHEMA)
-    # Bronze layer is append-only — never overwrite
     df.write.format("delta").mode("append").save(delta_path)
 
 
