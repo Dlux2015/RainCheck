@@ -88,8 +88,14 @@ def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> N
 
 def run(delta_path: str = "/Volumes/workspace/default/raincheck/delta/bronze/storms") -> None:
     spark = SparkSession.builder.appName("nhc_storm_ingest").getOrCreate()
-    xml_text = fetch_nhc_feed()
-    records = parse_nhc_feed(xml_text)
+    try:
+        xml_text = fetch_nhc_feed()
+        records = parse_nhc_feed(xml_text)
+    except Exception as e:
+        # Transient NHC feed failure (empty body, timeout, non-XML response) —
+        # write empty table so downstream silver/gold still run cleanly
+        print(f"WARNING: NHC feed unavailable ({e}) — writing empty storm table")
+        records = []
     write_bronze(records, spark, delta_path)
     print(f"Ingested {len(records)} storm records → {delta_path}")
 
