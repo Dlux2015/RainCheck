@@ -98,7 +98,7 @@ def run(spark: SparkSession | None = None) -> None:
         spark = SparkSession.builder.appName("supabase_writer").getOrCreate()
     df = spark.read.format("delta").load(DELTA_SILVER_STORMS).toPandas()
     push_storms(spark)
-    push_storm_flag(is_active=not df.empty)
+    push_storm_flag(active=not df.empty)
 
 
 if __name__ == "__main__":
