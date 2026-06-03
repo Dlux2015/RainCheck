@@ -48,8 +48,8 @@ Hurricane Gas Predictor monitors active Atlantic storms and Gulf Coast gas price
 | Source | Data | License |
 |--------|------|---------|
 | NOAA / NHC RSS | Storm tracks, wind speed | Public domain |
+| EIA Open Data API | Gulf Coast gas prices by grade | Public domain (free key) |
 | EIA (seed data) | Gulf Coast refinery locations | Public domain |
-| Zyla API | US gas prices by region | Commercial (key required) |
 | Supabase | Signal and price persistence | Open source / hosted |
 
 ## Stack
@@ -97,7 +97,7 @@ npm run dev
 
 | Variable | Description |
 |----------|-------------|
-| `ZYLA_API_KEY` | Zyla API key for US gas prices |
+| `EIA_API_KEY` | EIA Open Data API key — free at https://www.eia.gov/opendata/ |
 | `DATABRICKS_HOST` | Your Databricks workspace URL |
 | `DATABRICKS_TOKEN` | Databricks personal access token |
 | `DATABRICKS_JOB_ID_ETL` | Job ID for the ingestion/ETL Databricks job |

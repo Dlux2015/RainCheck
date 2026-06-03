@@ -30,7 +30,7 @@ jobs:
 
       - name: Run pytest
         env:
-          ZYLA_API_KEY: test-key
+          EIA_API_KEY: test-key
           DATABRICKS_HOST: https://test.databricks.com
           DATABRICKS_TOKEN: test-token
           DATABRICKS_JOB_ID_ETL: "1"

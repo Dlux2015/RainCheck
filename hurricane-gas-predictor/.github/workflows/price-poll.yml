@@ -20,9 +20,9 @@ jobs:
       - name: Install dependencies
         run: pip install httpx supabase
 
-      - name: Check storm flag and poll Zyla if active
+      - name: Check storm flag and poll EIA if active
         env:
-          ZYLA_API_KEY: ${{ secrets.ZYLA_API_KEY }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
@@ -48,26 +48,41 @@ jobs:
               print("No active storm — skipping price poll")
               raise SystemExit(0)
 
-          api_key = os.environ["ZYLA_API_KEY"]
-          resp = httpx.get(
-              "https://zylalabs.com/api/392/us+gas+prices+api/1016/get+gas+prices",
-              headers={"Authorization": f"Bearer {api_key}"},
-              params={"region": "gulf-coast"},
-              timeout=30,
-          )
-          resp.raise_for_status()
-          prices = resp.json() if isinstance(resp.json(), list) else [resp.json()]
+          api_key = os.environ["EIA_API_KEY"]
+          eia_base = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
+          series = {
+              "regular":  "EMM_EPMRR_PTE_R30_DPG",
+              "midgrade": "EMM_EPMM_PTE_R30_DPG",
+              "premium":  "EMM_EPMP_PTE_R30_DPG",
+          }
 
           now = datetime.now(timezone.utc).isoformat()
-          rows = [
-              {
-                  "region": p.get("region", "gulf-coast"),
-                  "grade": p.get("grade", "regular"),
-                  "price_usd": float(p.get("price", 0)),
-                  "ingested_at": now,
-              }
-              for p in prices
-          ]
-          sb.table("gas_prices").insert(rows).execute()
-          print(f"Inserted {len(rows)} price record(s) to Supabase")
+          rows = []
+          for grade, series_id in series.items():
+              resp = httpx.get(
+                  eia_base,
+                  params={
+                      "api_key": api_key,
+                      "frequency": "weekly",
+                      "data[]": "value",
+                      "facets[series][]": series_id,
+                      "sort[0][column]": "period",
+                      "sort[0][direction]": "desc",
+                      "length": 1,
+                  },
+                  timeout=30,
+              )
+              resp.raise_for_status()
+              data = resp.json().get("response", {}).get("data", [])
+              if data:
+                  rows.append({
+                      "region": "gulf-coast",
+                      "grade": grade,
+                      "price_usd": float(data[0]["value"]),
+                      "ingested_at": now,
+                  })
+
+          if rows:
+              sb.table("gas_prices").insert(rows).execute()
+              print(f"Inserted {len(rows)} price record(s) to Supabase")
           EOF

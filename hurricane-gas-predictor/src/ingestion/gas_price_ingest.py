@@ -1,4 +1,4 @@
-"""Ingest Gulf Coast gas price data from Zyla API into Delta Lake bronze layer."""
+"""Ingest Gulf Coast gas price data from EIA Open Data API into Delta Lake bronze layer."""
 
 import os
 from datetime import datetime
@@ -10,7 +10,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ZYLA_BASE_URL = "https://zylalabs.com/api/392/us+gas+prices+api/1016/get+gas+prices"
+EIA_BASE_URL = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
+
+# EIA series IDs for Gulf Coast gasoline grades (PADD 3)
+EIA_SERIES = {
+    "regular":  "EMM_EPMRR_PTE_R30_DPG",
+    "midgrade": "EMM_EPMM_PTE_R30_DPG",
+    "premium":  "EMM_EPMP_PTE_R30_DPG",
+}
 
 BRONZE_SCHEMA = StructType([
     StructField("region", StringType(), True),
@@ -22,28 +29,40 @@ BRONZE_SCHEMA = StructType([
 
 
 def fetch_gas_prices(region: str = "gulf-coast") -> list[dict]:
-    api_key = os.getenv("ZYLA_API_KEY")
+    api_key = os.getenv("EIA_API_KEY")
     if not api_key:
-        raise EnvironmentError("ZYLA_API_KEY is not set")
-    response = httpx.get(
-        ZYLA_BASE_URL,
-        headers={"Authorization": f"Bearer {api_key}"},
-        params={"region": region},
-        timeout=30,
-    )
-    response.raise_for_status()
-    data = response.json()
+        raise EnvironmentError("EIA_API_KEY is not set")
+
     now = datetime.utcnow()
-    return [
-        {
-            "region": entry.get("region", region),
-            "grade": entry.get("grade", "regular"),
-            "price_usd": float(entry.get("price", 0)),
-            "source_url": ZYLA_BASE_URL,
-            "ingested_at": now,
-        }
-        for entry in (data if isinstance(data, list) else [data])
-    ]
+    records = []
+
+    for grade, series_id in EIA_SERIES.items():
+        response = httpx.get(
+            EIA_BASE_URL,
+            params={
+                "api_key": api_key,
+                "frequency": "weekly",
+                "data[]": "value",
+                "facets[series][]": series_id,
+                "sort[0][column]": "period",
+                "sort[0][direction]": "desc",
+                "length": 1,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json().get("response", {}).get("data", [])
+
+        if data:
+            records.append({
+                "region": region,
+                "grade": grade,
+                "price_usd": float(data[0]["value"]),
+                "source_url": EIA_BASE_URL,
+                "ingested_at": now,
+            })
+
+    return records
 
 
 def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> None:
@@ -55,7 +74,7 @@ def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> N
 
 
 def run(delta_path: str = "dbfs:/delta/bronze/gas_prices") -> None:
-    spark = SparkSession.builder.appName("zyla_gas_ingest").getOrCreate()
+    spark = SparkSession.builder.appName("eia_gas_ingest").getOrCreate()
     records = fetch_gas_prices()
     write_bronze(records, spark, delta_path)
     print(f"Ingested {len(records)} gas price records → {delta_path}")
