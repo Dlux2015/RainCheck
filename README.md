@@ -5,7 +5,7 @@
 
 Open source ML app that predicts optimal gas buying windows during Atlantic hurricane events.
 
-**Live demo:** [rain-check-theta.vercel.app](https://rain-check-theta.vercel.app) &nbsp;·&nbsp; **Source:** [`hurricane-gas-predictor/`](hurricane-gas-predictor/)
+**Live demo:** [rain-check-b261.vercel.app](https://rain-check-b261.vercel.app) &nbsp;·&nbsp; **Source:** [`hurricane-gas-predictor/`](hurricane-gas-predictor/)
 
 ---
 
