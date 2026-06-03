@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { FLORIDA_CITIES } from '../hooks/useWeather'
 
 // ---------------------------------------------------------------------------
 // Sky gradients keyed by [category][phase]
@@ -176,10 +177,20 @@ function Lightning() {
 }
 
 // ---------------------------------------------------------------------------
-// Weather info chip (bottom-left)
+// Weather info chip — clickable city selector
 // ---------------------------------------------------------------------------
-export function WeatherChip({ weather }) {
+export function WeatherChip({ weather, selectedCity, onCityChange }) {
   const { category, phase, tempC } = weather
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   const label = {
     clear:         phase === 'night' ? 'Clear Night' : phase === 'dawn' ? 'Sunrise' : phase === 'dusk' ? 'Sunset' : 'Clear',
     partly_cloudy: 'Partly Cloudy',
@@ -198,17 +209,80 @@ export function WeatherChip({ weather }) {
 
   const tempF = tempC !== null ? Math.round(tempC * 9 / 5 + 32) : null
 
+  // Group cities by region for the dropdown
+  const regions = FLORIDA_CITIES.reduce((acc, city) => {
+    if (!acc[city.region]) acc[city.region] = []
+    acc[city.region].push(city)
+    return acc
+  }, {})
+
+  const chipStyle = {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)',
+    borderRadius: 20, padding: '4px 12px',
+    fontSize: 12, color: 'rgba(255,255,255,0.88)',
+    border: `1px solid ${open ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`,
+    cursor: 'pointer', userSelect: 'none',
+    transition: 'border-color 0.15s, background 0.15s',
+  }
+
   return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)',
-      borderRadius: 20, padding: '4px 12px',
-      fontSize: 12, color: 'rgba(255,255,255,0.88)',
-      border: '1px solid rgba(255,255,255,0.15)',
-      userSelect: 'none',
-    }}>
-      <span>{icon}</span>
-      <span>Orlando, FL · {label}{tempF !== null ? ` · ${tempF}°F` : ''}</span>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <div style={chipStyle} onClick={() => setOpen(o => !o)}>
+        <span>{icon}</span>
+        <span>
+          {selectedCity.name}, FL · {label}
+          {tempF !== null ? ` · ${tempF}°F` : ''}
+        </span>
+        <span style={{ opacity: 0.7, fontSize: 9, marginLeft: 2 }}>{open ? '▲' : '▼'}</span>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+          minWidth: 220, maxHeight: 320, overflowY: 'auto',
+          background: 'rgba(10,20,35,0.88)', backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 12, padding: '6px 0',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          zIndex: 100,
+        }}>
+          {Object.entries(regions).sort().map(([region, cities]) => (
+            <div key={region}>
+              <div style={{
+                padding: '4px 14px 2px',
+                fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+                color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase',
+              }}>
+                {region}
+              </div>
+              {cities.map(city => (
+                <div
+                  key={city.name}
+                  onClick={() => { onCityChange(city); setOpen(false) }}
+                  style={{
+                    padding: '7px 14px',
+                    fontSize: 13,
+                    color: city.name === selectedCity.name
+                      ? 'rgba(255,255,255,1)'
+                      : 'rgba(255,255,255,0.75)',
+                    background: city.name === selectedCity.name
+                      ? 'rgba(255,255,255,0.12)'
+                      : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.1s',
+                    fontWeight: city.name === selectedCity.name ? 600 : 400,
+                  }}
+                  onMouseEnter={e => { if (city.name !== selectedCity.name) e.target.style.background = 'rgba(255,255,255,0.07)' }}
+                  onMouseLeave={e => { if (city.name !== selectedCity.name) e.target.style.background = 'transparent' }}
+                >
+                  {city.name}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

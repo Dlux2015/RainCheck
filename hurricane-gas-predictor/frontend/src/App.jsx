@@ -4,7 +4,7 @@ import PriceChart from './components/PriceChart'
 import BuySignalCard from './components/BuySignalCard'
 import MetricRow from './components/MetricRow'
 import WeatherBackground, { WeatherChip } from './components/WeatherBackground'
-import { useWeather } from './hooks/useWeather'
+import { useWeather, DEFAULT_CITY } from './hooks/useWeather'
 
 const API = import.meta.env.VITE_API_URL || '/api'
 
@@ -23,7 +23,8 @@ export default function App() {
   const [signal, setSignal] = useState(null)
   const [prices, setPrices] = useState({ regular: [], midgrade: [], premium: [] })
   const [storms, setStorms] = useState([])
-  const weather = useWeather()
+  const [selectedCity, setSelectedCity] = useState(DEFAULT_CITY)
+  const weather = useWeather(selectedCity)
 
   useEffect(() => {
     fetch(`${API}/signal/latest`).then(r => r.json()).then(setSignal).catch(console.error)
@@ -74,7 +75,11 @@ export default function App() {
           }}>
             Optimal gas buying windows during Atlantic hurricane events
           </p>
-          <WeatherChip weather={weather} />
+          <WeatherChip
+            weather={weather}
+            selectedCity={selectedCity}
+            onCityChange={setSelectedCity}
+          />
         </div>
 
         {/* Signal card — already has coloured background, just lift slightly */}
