@@ -20,6 +20,9 @@ def _supabase() -> Client:
 
 def _to_iso(ts) -> str:
     if hasattr(ts, "astimezone"):
+        if getattr(ts, "tzinfo", None) is None:
+            # tz-naive (e.g. from Pandas mock data) — treat as UTC
+            ts = ts.replace(tzinfo=timezone.utc)
         return ts.astimezone(timezone.utc).isoformat()
     return str(ts)
 

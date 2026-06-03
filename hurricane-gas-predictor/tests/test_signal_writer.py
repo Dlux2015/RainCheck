@@ -30,13 +30,11 @@ def test_write_signal_inserts_to_supabase(mock_client, monkeypatch):
 
 @patch("src.ml.signal_writer.create_client")
 def test_write_signal_missing_env_raises(mock_client, monkeypatch):
+    # Remove from os.environ — write_signal reads them at call time via os.getenv()
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_KEY", raising=False)
 
-    import importlib
-    import src.ml.signal_writer as sw
-    importlib.reload(sw)
-
     import pytest
+    from src.ml.signal_writer import write_signal
     with pytest.raises(EnvironmentError):
-        sw.write_signal(SAMPLE_RESULT)
+        write_signal(SAMPLE_RESULT)

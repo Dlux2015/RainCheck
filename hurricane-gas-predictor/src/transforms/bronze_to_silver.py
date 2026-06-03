@@ -11,13 +11,16 @@ def clean_storms(
 ) -> None:
     df = spark.read.format("delta").load(bronze_path)
     silver = (
-        df.dropDuplicates(["storm_id", "ingested_at"])
-          .filter(F.col("storm_id").isNotNull())
-          .withColumn("lat", F.col("lat").cast("double"))
-          .withColumn("lon", F.col("lon").cast("double"))
-          .withColumn("wind_speed_kt", F.col("wind_speed_kt").cast("integer"))
-          .withColumn("processed_at", F.current_timestamp())
-          .drop("raw_xml")
+        df
+        # Deduplicate by advisory identity, not ingestion time
+        .dropDuplicates(["storm_id", "pub_date"])
+        .filter(F.col("storm_id").isNotNull())
+        .withColumn("lat", F.col("lat").cast("double"))
+        .withColumn("lon", F.col("lon").cast("double"))
+        .withColumn("wind_speed_kt", F.col("wind_speed_kt").cast("integer"))
+        .withColumn("pub_date", F.to_timestamp("pub_date", "EEE, dd MMM yyyy HH:mm:ss z"))
+        .withColumn("processed_at", F.current_timestamp())
+        .drop("raw_xml")
     )
     silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(silver_path)
     print(f"Silver storms: {silver.count()} rows → {silver_path}")
@@ -30,9 +33,12 @@ def clean_gas_prices(
 ) -> None:
     df = spark.read.format("delta").load(bronze_path)
     silver = (
-        df.dropDuplicates(["region", "grade", "ingested_at"])
-          .filter(F.col("price_usd") > 0)
-          .withColumn("processed_at", F.current_timestamp())
+        df
+        # Deduplicate by the actual price period, not ingestion time
+        .dropDuplicates(["series", "period"])
+        .filter(F.col("price_usd") > 0)
+        .withColumn("period", F.to_date("period"))
+        .withColumn("processed_at", F.current_timestamp())
     )
     silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(silver_path)
     print(f"Silver gas prices: {silver.count()} rows → {silver_path}")

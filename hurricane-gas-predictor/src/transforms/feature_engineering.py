@@ -14,8 +14,9 @@ def build_features(
     storms = spark.read.format("delta").load(silver_storms)
     prices = spark.read.format("delta").load(silver_prices)
 
-    price_window = Window.partitionBy("region").orderBy("ingested_at").rowsBetween(-6, 0)
-    lag_window = Window.partitionBy("region").orderBy("ingested_at")
+    # Order windows by actual price period date, not ingestion time
+    price_window = Window.partitionBy("region").orderBy(F.col("period").cast("timestamp")).rowsBetween(-6, 0)
+    lag_window = Window.partitionBy("region").orderBy(F.col("period").cast("timestamp"))
 
     prices_featured = (
         prices
@@ -27,26 +28,26 @@ def build_features(
         )
     )
 
+    # Aggregate storm activity by calendar week to align with weekly price data
     storm_agg = (
         storms
-        .groupBy(F.window("ingested_at", "6 hours").alias("time_window"))
+        .withColumn("week", F.date_trunc("week", F.col("ingested_at")))
+        .groupBy("week")
         .agg(
             F.max("wind_speed_kt").alias("max_wind_kt"),
             F.count("storm_id").alias("active_storm_count"),
             F.avg("lat").alias("storm_centroid_lat"),
             F.avg("lon").alias("storm_centroid_lon"),
         )
-        .withColumn("window_start", F.col("time_window.start"))
-        .drop("time_window")
     )
 
+    # Join weekly prices to storm activity for the same calendar week;
+    # fill 0 for weeks with no active storms (no storm → no wind, no count)
     features = (
-        storm_agg
-        .crossJoin(
-            prices_featured
-            .select("ingested_at", "region", "price_usd", "price_7d_avg", "price_pct_change")
-            .distinct()
-        )
+        prices_featured
+        .withColumn("week", F.date_trunc("week", F.col("period").cast("timestamp")))
+        .join(storm_agg, "week", "left")
+        .fillna(0, subset=["max_wind_kt", "active_storm_count", "storm_centroid_lat", "storm_centroid_lon"])
         .withColumn("label", F.when(F.col("price_pct_change") > 0.03, 1).otherwise(0))
     )
 
