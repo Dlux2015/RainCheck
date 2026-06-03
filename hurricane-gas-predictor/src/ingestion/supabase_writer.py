@@ -27,7 +27,7 @@ def _to_iso(ts) -> str:
     return str(ts)
 
 
-def push_storms(spark: SparkSession, silver_path: str = "file:///tmp/delta/silver/storms") -> None:
+def push_storms(spark: SparkSession, silver_path: str = "/Volumes/workspace/default/raincheck/delta/silver/storms") -> None:
     """Upsert latest storm positions into Supabase and append track history."""
     df = spark.read.format("delta").load(silver_path).toPandas()
     if df.empty:
@@ -86,7 +86,7 @@ def run(spark: SparkSession | None = None) -> None:
     if spark is None:
         spark = SparkSession.builder.appName("supabase_writer").getOrCreate()
 
-    df = spark.read.format("delta").load("file:///tmp/delta/silver/storms").toPandas()
+    df = spark.read.format("delta").load("/Volumes/workspace/default/raincheck/delta/silver/storms").toPandas()
     is_active = not df.empty
 
     push_storms(spark)

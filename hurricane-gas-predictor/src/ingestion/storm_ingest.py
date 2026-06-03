@@ -88,7 +88,7 @@ def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> N
     df.write.format("delta").mode("append").save(delta_path)
 
 
-def run(delta_path: str = "file:///tmp/delta/bronze/storms") -> None:
+def run(delta_path: str = "/Volumes/workspace/default/raincheck/delta/bronze/storms") -> None:
     spark = SparkSession.builder.appName("nhc_storm_ingest").getOrCreate()
     xml_text = fetch_nhc_feed()
     records = parse_nhc_feed(xml_text)

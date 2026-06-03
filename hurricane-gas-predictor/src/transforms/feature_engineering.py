@@ -7,9 +7,9 @@ from pyspark.sql.window import Window
 
 def build_features(
     spark: SparkSession,
-    silver_storms: str = "file:///tmp/delta/silver/storms",
-    silver_prices: str = "file:///tmp/delta/silver/gas_prices",
-    gold_path: str = "file:///tmp/delta/gold/features",
+    silver_storms: str = "/Volumes/workspace/default/raincheck/delta/silver/storms",
+    silver_prices: str = "/Volumes/workspace/default/raincheck/delta/silver/gas_prices",
+    gold_path: str = "/Volumes/workspace/default/raincheck/delta/gold/features",
 ) -> None:
     storms = spark.read.format("delta").load(silver_storms)
     prices = spark.read.format("delta").load(silver_prices)
