@@ -14,9 +14,9 @@ def build_features(
     storms = spark.read.format("delta").load(silver_storms)
     prices = spark.read.format("delta").load(silver_prices)
 
-    # Order windows by actual price period date, not ingestion time
-    price_window = Window.partitionBy("region").orderBy(F.col("period").cast("timestamp")).rowsBetween(-6, 0)
-    lag_window = Window.partitionBy("region").orderBy(F.col("period").cast("timestamp"))
+    # Partition by grade so each fuel type gets its own independent rolling window
+    price_window = Window.partitionBy("region", "grade").orderBy(F.col("period").cast("timestamp")).rowsBetween(-6, 0)
+    lag_window = Window.partitionBy("region", "grade").orderBy(F.col("period").cast("timestamp"))
 
     prices_featured = (
         prices

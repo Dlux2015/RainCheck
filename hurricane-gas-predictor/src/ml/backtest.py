@@ -29,7 +29,7 @@ def run_backtest(n_splits: int = 5) -> pd.DataFrame:
         spark.read.format("delta").load(GOLD_PATH)
              .toPandas()
              .dropna(subset=FEATURE_COLS + [LABEL_COL])
-             .sort_values("window_start")
+             .sort_values("week")
              .reset_index(drop=True)
     )
 

@@ -23,7 +23,7 @@ def _latest_features(spark: SparkSession) -> dict | None:
     """Return the most recent feature row from the gold layer."""
     df = (
         spark.read.format("delta").load(GOLD_PATH)
-             .orderBy("window_start", ascending=False)
+             .orderBy("week", ascending=False)
              .limit(1)
              .toPandas()
     )
