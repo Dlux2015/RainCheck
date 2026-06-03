@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Unity Catalog requires 3-part name and alias syntax (stages are unsupported)
-MODEL_NAME = "workspace.default.hurricane-gas-signal"
-MODEL_ALIAS = "champion"
+# Workspace Model Registry — simple name + stage (Free Edition doesn't support
+# UC model storage; stages work fine in the workspace registry)
+MODEL_NAME = "hurricane-gas-signal"
+MODEL_STAGE = "Production"
 BUY_THRESHOLD = 0.65
 
 FEATURE_COLS = [
@@ -23,8 +24,7 @@ FEATURE_COLS = [
 
 
 def load_model():
-    mlflow.set_registry_uri("databricks-uc")
-    return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}@{MODEL_ALIAS}")
+    return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}/{MODEL_STAGE}")
 
 
 def predict(features: dict) -> dict:

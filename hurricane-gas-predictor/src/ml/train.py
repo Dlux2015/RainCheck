@@ -14,9 +14,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GOLD_PATH = "/Volumes/workspace/default/raincheck/delta/gold/features"
-# Unity Catalog requires 3-part name; alias replaces stage
-MODEL_NAME = "workspace.default.hurricane-gas-signal"
-MODEL_ALIAS = "champion"
+# Workspace Model Registry — simple name, no 3-part UC syntax (Free Edition
+# doesn't grant S3 write access to the UC model storage bucket)
+MODEL_NAME = "hurricane-gas-signal"
 
 FEATURE_COLS = [
     "max_wind_kt",
@@ -49,11 +49,10 @@ def load_features(spark: SparkSession) -> tuple[np.ndarray, np.ndarray]:
 
 
 def train(params: dict | None = None) -> str:
-    """Train model, log to MLflow, register with champion alias, return run_id."""
+    """Train model, log to MLflow, register as Production in workspace registry, return run_id."""
     if params is None:
         params = DEFAULT_PARAMS
 
-    mlflow.set_registry_uri("databricks-uc")
     spark = SparkSession.builder.appName("xgb_train").getOrCreate()
     X, y = load_features(spark)
     if len(X) < 10:
@@ -78,11 +77,13 @@ def train(params: dict | None = None) -> str:
         mlflow.xgboost.log_model(model, artifact_path="model", signature=signature)
         mv = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
 
-        # UC uses aliases instead of stages — mark this version as champion
-        MlflowClient().set_registered_model_alias(MODEL_NAME, MODEL_ALIAS, mv.version)
+        # Promote to Production, archive any previous Production version
+        MlflowClient().transition_model_version_stage(
+            MODEL_NAME, mv.version, stage="Production", archive_existing_versions=True
+        )
 
         print(f"Run {run.info.run_id} — AUC: {auc:.4f}  F1: {f1:.4f}")
-        print(f"Registered {MODEL_NAME} v{mv.version} @{MODEL_ALIAS}")
+        print(f"Registered {MODEL_NAME} v{mv.version} → Production")
         return run.info.run_id
 
 
