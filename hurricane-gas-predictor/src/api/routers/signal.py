@@ -28,6 +28,7 @@ class SignalRequest(BaseModel):
     storm_centroid_lon: float
     price_7d_avg: float
     price_pct_change: float
+    refinery_capacity_at_risk_pct: float = 0.0
 
 
 @router.post("/")
@@ -39,6 +40,22 @@ def get_signal(req: SignalRequest):
         result = predict(req.model_dump())
         write_signal(result)
         return result
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@router.get("/accuracy")
+def get_model_accuracy():
+    """Return the most recent backtest metrics (AUC, precision, recall)."""
+    try:
+        resp = requests.get(
+            _sb("model_metrics"),
+            headers=_headers(),
+            params={"order": "created_at.desc", "limit": "1"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else {}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 

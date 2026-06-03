@@ -25,6 +25,7 @@ FEATURE_COLS = [
     "storm_centroid_lon",
     "price_7d_avg",
     "price_pct_change",
+    "refinery_capacity_at_risk_pct",
 ]
 LABEL_COL = "label"
 

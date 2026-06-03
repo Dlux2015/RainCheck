@@ -1,0 +1,49 @@
+name: Annual HURDAT2 URL Update
+
+on:
+  schedule:
+    # Jan 1 at 06:00 UTC — NOAA typically publishes the prior season's final
+    # HURDAT2 file in the spring, but a January check catches early releases
+    - cron: '0 6 1 1 *'
+  workflow_dispatch:
+
+jobs:
+  check-hurdat2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install httpx
+        run: pip install httpx
+
+      - name: Check for newer HURDAT2 file
+        id: check
+        run: |
+          python scripts/check_hurdat2_url.py
+          echo "changed=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Open PR if URL changed
+        if: steps.check.outputs.changed == '1'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update HURDAT2 default URL to latest NOAA release"
+          title: "chore: update HURDAT2 URL to latest NOAA release"
+          body: |
+            NOAA published a newer HURDAT2 Atlantic hurricane database file.
+
+            This PR updates the default URL in `src/ingestion/hurdat2_ingest.py`.
+
+            **After merging**, run `00_historical_backfill.ipynb` on Databricks
+            to ingest the new storm records, then trigger a retrain.
+          branch: chore/hurdat2-url-update
+          delete-branch: true

@@ -11,6 +11,7 @@ SAMPLE_FEATURES = {
     "storm_centroid_lon": -88.0,
     "price_7d_avg": 3.50,
     "price_pct_change": 0.04,
+    "refinery_capacity_at_risk_pct": 0.45,
 }
 
 

@@ -5,8 +5,6 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import httpx
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,18 +13,6 @@ NHC_RSS_URL = os.getenv("NHC_RSS_URL", "https://www.nhc.noaa.gov/nhc_at1.xml")
 
 # Namespace as declared in the actual NHC feed (https, not http)
 _NHC_NS = {"nhc": "https://www.nhc.noaa.gov"}
-
-BRONZE_SCHEMA = StructType([
-    StructField("storm_id", StringType(), True),
-    StructField("storm_name", StringType(), True),
-    StructField("status", StringType(), True),
-    StructField("pub_date", StringType(), True),
-    StructField("lat", StringType(), True),
-    StructField("lon", StringType(), True),
-    StructField("wind_speed_kt", StringType(), True),
-    StructField("raw_xml", StringType(), True),
-    StructField("ingested_at", TimestampType(), False),
-])
 
 
 def fetch_nhc_feed(url: str = NHC_RSS_URL) -> str:
@@ -80,13 +66,26 @@ def parse_nhc_feed(xml_text: str) -> list[dict]:
     return records
 
 
-def write_bronze(records: list[dict], spark: SparkSession, delta_path: str) -> None:
+def write_bronze(records: list[dict], spark, delta_path: str) -> None:
+    from pyspark.sql.types import StructType, StructField, StringType, TimestampType
+    schema = StructType([
+        StructField("storm_id",      StringType(), True),
+        StructField("storm_name",    StringType(), True),
+        StructField("status",        StringType(), True),
+        StructField("pub_date",      StringType(), True),
+        StructField("lat",           StringType(), True),
+        StructField("lon",           StringType(), True),
+        StructField("wind_speed_kt", StringType(), True),
+        StructField("raw_xml",       StringType(), True),
+        StructField("ingested_at",   TimestampType(), False),
+    ])
     # Always write even when empty — creates the Delta table so silver can always read it
-    df = spark.createDataFrame(records, schema=BRONZE_SCHEMA)
+    df = spark.createDataFrame(records, schema=schema)
     df.write.format("delta").mode("append").save(delta_path)
 
 
 def run(delta_path: str = "/Volumes/workspace/default/raincheck/delta/bronze/storms") -> None:
+    from pyspark.sql import SparkSession
     spark = SparkSession.builder.appName("nhc_storm_ingest").getOrCreate()
     try:
         xml_text = fetch_nhc_feed()

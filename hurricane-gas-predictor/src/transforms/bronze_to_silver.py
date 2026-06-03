@@ -53,6 +53,32 @@ def clean_gas_prices(
     print(f"Silver gas prices: {silver.count()} rows → {silver_path}")
 
 
+def clean_hurdat2_storms(
+    spark: SparkSession,
+    bronze_path: str = "/Volumes/workspace/default/raincheck/delta/bronze/storms_historical",
+    silver_path: str = "/Volumes/workspace/default/raincheck/delta/silver/storms_historical",
+) -> None:
+    df = spark.read.format("delta").load(bronze_path)
+    silver = (
+        df
+        .dropDuplicates(["storm_id", "pub_date"])
+        .filter(F.col("storm_id").isNotNull() & (F.col("storm_id") != ""))
+        # HURDAT2 uses same "28.0N" / "94.8W" compass encoding as NHC RSS
+        .withColumn("_lat_num", F.regexp_extract("lat", r"([0-9.]+)", 1).cast("double"))
+        .withColumn("lat", F.when(F.col("lat").contains("S"), -F.col("_lat_num")).otherwise(F.col("_lat_num")))
+        .drop("_lat_num")
+        .withColumn("_lon_num", F.regexp_extract("lon", r"([0-9.]+)", 1).cast("double"))
+        .withColumn("lon", F.when(F.col("lon").contains("W"), -F.col("_lon_num")).otherwise(F.col("_lon_num")))
+        .drop("_lon_num")
+        .withColumn("wind_speed_kt", F.col("wind_speed_kt").cast("integer"))
+        # HURDAT2 date format: "YYYYMMDD HHMM"
+        .withColumn("pub_date", F.to_timestamp("pub_date", "yyyyMMdd HHmm"))
+        .withColumn("processed_at", F.current_timestamp())
+    )
+    silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(silver_path)
+    print(f"Silver HURDAT2 storms: {silver.count()} rows → {silver_path}")
+
+
 def clean_refineries(
     spark: SparkSession,
     bronze_path: str = "/Volumes/workspace/default/raincheck/delta/bronze/refineries",

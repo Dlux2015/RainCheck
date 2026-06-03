@@ -4,7 +4,6 @@ import os
 from datetime import timezone
 
 import requests
-from pyspark.sql import SparkSession
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,7 +48,7 @@ def _to_iso(ts) -> str:
     return str(ts)
 
 
-def push_storms(spark: SparkSession, silver_path: str = DELTA_SILVER_STORMS) -> None:
+def push_storms(spark, silver_path: str = DELTA_SILVER_STORMS) -> None:
     url, key = _creds()
     df = spark.read.format("delta").load(silver_path).toPandas()
     if df.empty:
@@ -88,7 +87,7 @@ def push_storms(spark: SparkSession, silver_path: str = DELTA_SILVER_STORMS) -> 
     print(f"Appended {len(track_rows)} track point(s) to Supabase")
 
 
-def push_gas_prices(spark: SparkSession, silver_path: str = DELTA_SILVER_PRICES) -> None:
+def push_gas_prices(spark, silver_path: str = DELTA_SILVER_PRICES) -> None:
     url, key = _creds()
     df = spark.read.format("delta").load(silver_path).toPandas()
     if df.empty:
@@ -120,8 +119,9 @@ def push_storm_flag(active: bool) -> None:
     print(f"Storm flag set: active={active}")
 
 
-def run(spark: SparkSession | None = None) -> None:
+def run(spark=None) -> None:
     if spark is None:
+        from pyspark.sql import SparkSession
         spark = SparkSession.builder.appName("supabase_writer").getOrCreate()
     df = spark.read.format("delta").load(DELTA_SILVER_STORMS).toPandas()
     push_storms(spark)

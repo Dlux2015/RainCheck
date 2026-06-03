@@ -41,7 +41,20 @@ function ConfidenceBar({ probability, threshold }) {
   )
 }
 
-export default function BuySignalCard({ signal }) {
+function AccuracyBar({ label, value, color }) {
+  const pct = Math.round((value ?? 0) * 100)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+      <span style={{ width: 68, fontSize: 11, color: '#6b7280', flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, background: '#e5e7eb', borderRadius: 4, height: 6 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 4 }} />
+      </div>
+      <span style={{ width: 32, fontSize: 11, fontWeight: 600, color, textAlign: 'right' }}>{pct}%</span>
+    </div>
+  )
+}
+
+export default function BuySignalCard({ signal, accuracy }) {
   const isBuy = signal?.signal === 'BUY'
   const prob = signal?.probability ?? 0
   const threshold = signal?.threshold ?? 0.65
@@ -73,13 +86,25 @@ export default function BuySignalCard({ signal }) {
         oil infrastructure. Above {Math.round(threshold * 100)}% = BUY (fill up before supply
         disruptions). Below {Math.round(threshold * 100)}% = WAIT (no unusual risk).</div>
         <div style={{ marginTop: 6, color: '#9ca3af' }}>
-          Key signals: active storm count, max wind speed, storm proximity to refineries,
+          Key signals: active storm count, max wind speed, refinery capacity at risk,
           and recent price momentum.
         </div>
         {updatedAt && (
           <div style={{ marginTop: 6 }}>Last updated: {updatedAt}</div>
         )}
       </div>
+
+      {accuracy?.mean_auc != null && (
+        <div style={{ marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 10 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Historical model accuracy ({accuracy.n_folds}-fold backtest)
+          </div>
+          <AccuracyBar label="AUC"       value={accuracy.mean_auc}       color="#6366f1" />
+          <AccuracyBar label="Precision" value={accuracy.mean_precision} color="#0891b2" />
+          <AccuracyBar label="Recall"    value={accuracy.mean_recall}    color="#059669" />
+        </div>
+      )}
+
     </div>
   )
 }

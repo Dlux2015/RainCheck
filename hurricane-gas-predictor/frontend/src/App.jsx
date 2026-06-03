@@ -19,15 +19,40 @@ const glass = {
   boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
 }
 
+function useBuyNotification(signal) {
+  useEffect(() => {
+    if (signal?.signal !== 'BUY') return
+    if (!('Notification' in window)) return
+    const notify = () => {
+      if (Notification.permission === 'granted') {
+        new Notification('Hurricane Gas Predictor', {
+          body: `BUY signal — ${Math.round((signal.probability ?? 0) * 100)}% confidence. Fill up before prices spike.`,
+          icon: '/vite.svg',
+        })
+      }
+    }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(p => { if (p === 'granted') notify() })
+    } else {
+      notify()
+    }
+  }, [signal?.signal])
+}
+
 export default function App() {
   const [signal, setSignal] = useState(null)
+  const [accuracy, setAccuracy] = useState(null)
   const [prices, setPrices] = useState({ regular: [], midgrade: [], premium: [] })
   const [storms, setStorms] = useState([])
+  const [buyBannerDismissed, setBuyBannerDismissed] = useState(false)
   const [selectedCity, setSelectedCity] = useState(DEFAULT_CITY)
   const weather = useWeather(selectedCity)
 
+  useBuyNotification(signal)
+
   useEffect(() => {
     fetch(`${API}/signal/latest`).then(r => r.json()).then(setSignal).catch(console.error)
+    fetch(`${API}/signal/accuracy`).then(r => r.json()).then(setAccuracy).catch(console.error)
     fetch(`${API}/storm/active`).then(r => r.json()).then(d => setStorms(d.storms ?? [])).catch(console.error)
 
     Promise.all(
@@ -82,10 +107,29 @@ export default function App() {
           />
         </div>
 
+        {/* Dismissable BUY banner */}
+        {signal?.signal === 'BUY' && !buyBannerDismissed && (
+          <div style={{
+            background: '#166534', color: '#fff',
+            borderRadius: 10, padding: '12px 20px', marginBottom: 16,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+          }}>
+            <span style={{ fontWeight: 600 }}>
+              ⚡ BUY SIGNAL ACTIVE — Hurricane activity threatens Gulf Coast refineries. Fill up now.
+            </span>
+            <button
+              onClick={() => setBuyBannerDismissed(true)}
+              style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+              aria-label="Dismiss"
+            >✕</button>
+          </div>
+        )}
+
         {/* Signal card — already has coloured background, just lift slightly */}
         {signal && (
           <div style={{ marginBottom: 20 }}>
-            <BuySignalCard signal={signal} />
+            <BuySignalCard signal={signal} accuracy={accuracy} />
           </div>
         )}
 

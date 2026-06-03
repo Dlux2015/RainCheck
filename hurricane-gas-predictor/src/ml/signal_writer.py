@@ -4,7 +4,6 @@ import os
 
 import requests
 from mlflow.exceptions import MlflowException
-from pyspark.sql import SparkSession
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +16,11 @@ FEATURE_COLS = [
     "storm_centroid_lon",
     "price_7d_avg",
     "price_pct_change",
+    "refinery_capacity_at_risk_pct",
 ]
 
 
-def _latest_features(spark: SparkSession) -> dict | None:
+def _latest_features(spark) -> dict | None:
     """Return the most recent feature row from the gold layer."""
     df = (
         spark.read.format("delta").load(GOLD_PATH)
@@ -62,9 +62,10 @@ def write_signal(signal_result: dict) -> None:
     print(f"Signal persisted: {signal_result['signal']} ({signal_result['probability']:.2%})")
 
 
-def run(spark: SparkSession | None = None) -> None:
+def run(spark=None) -> None:
     """Full pipeline: load latest features → predict → write to Supabase."""
     if spark is None:
+        from pyspark.sql import SparkSession
         spark = SparkSession.builder.appName("signal_writer").getOrCreate()
 
     features = _latest_features(spark)

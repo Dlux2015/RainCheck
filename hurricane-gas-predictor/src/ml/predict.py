@@ -18,6 +18,7 @@ FEATURE_COLS = [
     "storm_centroid_lon",
     "price_7d_avg",
     "price_pct_change",
+    "refinery_capacity_at_risk_pct",
 ]
 
 
@@ -46,5 +47,6 @@ if __name__ == "__main__":
         "storm_centroid_lon": -89.0,
         "price_7d_avg": 3.45,
         "price_pct_change": 0.04,
+        "refinery_capacity_at_risk_pct": 0.45,
     }
     print(predict(sample))
