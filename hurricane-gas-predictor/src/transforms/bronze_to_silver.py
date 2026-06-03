@@ -6,8 +6,8 @@ from pyspark.sql import functions as F
 
 def clean_storms(
     spark: SparkSession,
-    bronze_path: str = "dbfs:/delta/bronze/storms",
-    silver_path: str = "dbfs:/delta/silver/storms",
+    bronze_path: str = "/tmp/delta/bronze/storms",
+    silver_path: str = "/tmp/delta/silver/storms",
 ) -> None:
     df = spark.read.format("delta").load(bronze_path)
     silver = (
@@ -33,8 +33,8 @@ def clean_storms(
 
 def clean_gas_prices(
     spark: SparkSession,
-    bronze_path: str = "dbfs:/delta/bronze/gas_prices",
-    silver_path: str = "dbfs:/delta/silver/gas_prices",
+    bronze_path: str = "/tmp/delta/bronze/gas_prices",
+    silver_path: str = "/tmp/delta/silver/gas_prices",
 ) -> None:
     df = spark.read.format("delta").load(bronze_path)
     silver = (
@@ -51,8 +51,8 @@ def clean_gas_prices(
 
 def clean_refineries(
     spark: SparkSession,
-    bronze_path: str = "dbfs:/delta/bronze/refineries",
-    silver_path: str = "dbfs:/delta/silver/refineries",
+    bronze_path: str = "/tmp/delta/bronze/refineries",
+    silver_path: str = "/tmp/delta/silver/refineries",
 ) -> None:
     df = spark.read.format("delta").load(bronze_path)
     silver = (

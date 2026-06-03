@@ -34,7 +34,7 @@ def write_bronze(spark: SparkSession, delta_path: str) -> None:
     df.write.format("delta").mode("append").save(delta_path)
 
 
-def run(delta_path: str = "dbfs:/delta/bronze/refineries") -> None:
+def run(delta_path: str = "/tmp/delta/bronze/refineries") -> None:
     spark = SparkSession.builder.appName("refinery_ingest").getOrCreate()
     write_bronze(spark, delta_path)
     print(f"Seeded {len(GULF_COAST_REFINERIES)} refinery records → {delta_path}")

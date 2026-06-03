@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GOLD_PATH = "dbfs:/delta/gold/features"
+GOLD_PATH = "/tmp/delta/gold/features"
 MODEL_NAME = "hurricane-gas-signal"
 
 FEATURE_COLS = [
