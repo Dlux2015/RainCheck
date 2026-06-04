@@ -1,0 +1,118 @@
+name: Run Training and Backtest
+
+on:
+  workflow_dispatch:
+
+jobs:
+  train-and-backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install httpx
+        run: pip install httpx
+
+      - name: Trigger training job, then run backtest
+        env:
+          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, httpx, time, json, base64, textwrap
+
+          host  = os.environ["DATABRICKS_HOST"].rstrip("/")
+          token = os.environ["DATABRICKS_TOKEN"]
+          h     = {"Authorization": f"Bearer {token}"}
+
+          TRAIN_JOB_ID = 804866658302765
+
+          # ── 1. Trigger existing Signal/Train job ────────────────────────
+          r = httpx.post(f"{host}/api/2.1/jobs/run-now",
+                         headers=h, json={"job_id": TRAIN_JOB_ID}, timeout=30)
+          r.raise_for_status()
+          train_run_id = r.json()["run_id"]
+          print(f"Training job submitted — run_id={train_run_id}")
+
+          def wait(run_id, label, max_polls=60):
+              for _ in range(max_polls):
+                  time.sleep(30)
+                  s = httpx.get(f"{host}/api/2.1/jobs/runs/get",
+                                headers=h, params={"run_id": run_id}, timeout=30).json()
+                  state  = s["state"]["life_cycle_state"]
+                  result = s["state"].get("result_state", "")
+                  print(f"  [{label}] {state}/{result}")
+                  if state == "TERMINATED":
+                      if result != "SUCCESS":
+                          raise RuntimeError(f"{label} run {run_id} ended: {result}")
+                      return s
+                  if state in ("INTERNAL_ERROR", "SKIPPED"):
+                      raise RuntimeError(f"{label} run {run_id}: {state}")
+              raise TimeoutError(f"{label} run {run_id} timed out")
+
+          wait(train_run_id, "TRAIN")
+
+          # ── 2. Get the training job's cluster config for the backtest ───
+          job_def   = httpx.get(f"{host}/api/2.1/jobs/get",
+                                headers=h, params={"job_id": TRAIN_JOB_ID}, timeout=30).json()
+          settings  = job_def.get("settings", {})
+          tasks     = settings.get("tasks", [])
+          jclusters = settings.get("job_clusters", [])
+
+          cluster_cfg = {}
+          if jclusters:
+              cluster_cfg = jclusters[0].get("new_cluster", {})
+          elif tasks and tasks[0].get("new_cluster"):
+              cluster_cfg = tasks[0]["new_cluster"]
+
+          # Inject Supabase creds so the backtest can push metrics
+          supabase_url = os.environ.get("SUPABASE_URL", "")
+          supabase_key = os.environ.get("SUPABASE_KEY", "")
+          cluster_cfg.setdefault("spark_env_vars", {}).update(
+              {"SUPABASE_URL": supabase_url, "SUPABASE_KEY": supabase_key}
+          )
+
+          # ── 3. Upload backtest script to DBFS ───────────────────────────
+          script = textwrap.dedent("""
+              import shutil, subprocess, sys, os
+              CLONE_DIR = '/tmp/RainCheck'
+              shutil.rmtree(CLONE_DIR, ignore_errors=True)
+              subprocess.run(['git', 'clone', '--depth=1', '--quiet',
+                              'https://github.com/Dlux2015/RainCheck.git', CLONE_DIR],
+                             check=True)
+              sys.path.insert(0, os.path.join(CLONE_DIR, 'hurricane-gas-predictor'))
+              from src.ml.backtest import run_backtest
+              results = run_backtest(n_splits=5)
+              print(results.to_string(index=False))
+          """).strip()
+
+          httpx.post(f"{host}/api/2.0/dbfs/put", headers=h, json={
+              "path": "dbfs:/tmp/raincheck_backtest.py",
+              "contents": base64.b64encode(script.encode()).decode(),
+              "overwrite": True,
+          }, timeout=30).raise_for_status()
+          print("Backtest script uploaded to DBFS")
+
+          # ── 4. Submit backtest run ───────────────────────────────────────
+          submit_body = {
+              "run_name": "raincheck-backtest",
+              "spark_python_task": {"python_file": "dbfs:/tmp/raincheck_backtest.py"},
+          }
+          if cluster_cfg:
+              submit_body["new_cluster"] = cluster_cfg
+          else:
+              # Fallback if we couldn't extract cluster config
+              submit_body["new_cluster"] = {
+                  "spark_version": "15.4.x-scala2.12",
+                  "node_type_id": "i3.xlarge",
+                  "num_workers": 1,
+                  "spark_env_vars": {"SUPABASE_URL": supabase_url, "SUPABASE_KEY": supabase_key},
+              }
+
+          bt = httpx.post(f"{host}/api/2.1/jobs/runs/submit",
+                          headers=h, json=submit_body, timeout=30)
+          bt.raise_for_status()
+          bt_run_id = bt.json()["run_id"]
+          print(f"Backtest submitted — run_id={bt_run_id}")
+          wait(bt_run_id, "BACKTEST", max_polls=120)
+          print("All done!")
+          PYEOF
