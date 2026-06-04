@@ -2,7 +2,6 @@
 
 import mlflow
 import mlflow.xgboost
-from mlflow import MlflowClient
 from mlflow.models import infer_signature
 import numpy as np
 import xgboost as xgb
@@ -14,9 +13,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GOLD_PATH = "/Volumes/workspace/default/raincheck/delta/gold/features"
-# Workspace Model Registry — simple name, no 3-part UC syntax (Free Edition
-# doesn't grant S3 write access to the UC model storage bucket)
-MODEL_NAME = "hurricane-gas-signal"
+# Free Edition doesn't have model registry — save directly to a UC Volume path.
+# predict.py loads from this path; retraining overwrites it in-place.
+MODEL_PATH = "/Volumes/workspace/default/raincheck/models/hurricane-gas-signal"
 
 FEATURE_COLS = [
     "max_wind_kt",
@@ -49,7 +48,7 @@ def load_features(spark: SparkSession) -> tuple[np.ndarray, np.ndarray]:
 
 
 def train(params: dict | None = None) -> str:
-    """Train model, log to MLflow, register as Production in workspace registry, return run_id."""
+    """Train model, log to MLflow, save to UC Volume, return run_id."""
     if params is None:
         params = DEFAULT_PARAMS
 
@@ -74,16 +73,13 @@ def train(params: dict | None = None) -> str:
         mlflow.log_metrics({"auc": auc, "f1": f1})
 
         signature = infer_signature(X_train, model.predict_proba(X_train)[:, 1])
+        # Log to MLflow run for experiment tracking
         mlflow.xgboost.log_model(model, artifact_path="model", signature=signature)
-        mv = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
-
-        # Promote to Production, archive any previous Production version
-        MlflowClient().transition_model_version_stage(
-            MODEL_NAME, mv.version, stage="Production", archive_existing_versions=True
-        )
+        # Save to UC Volume so predict.py can load it without the model registry
+        mlflow.xgboost.save_model(model, MODEL_PATH)
 
         print(f"Run {run.info.run_id} — AUC: {auc:.4f}  F1: {f1:.4f}")
-        print(f"Registered {MODEL_NAME} v{mv.version} → Production")
+        print(f"Model saved to {MODEL_PATH}")
         return run.info.run_id
 
 

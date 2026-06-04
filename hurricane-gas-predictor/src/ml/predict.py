@@ -1,4 +1,4 @@
-"""Load registered XGBoost model and generate BUY / WAIT signals."""
+"""Load XGBoost model from UC Volume and generate BUY / WAIT signals."""
 
 import mlflow.xgboost
 import numpy as np
@@ -6,10 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Workspace Model Registry — simple name + stage (Free Edition doesn't support
-# UC model storage; stages work fine in the workspace registry)
-MODEL_NAME = "hurricane-gas-signal"
-MODEL_STAGE = "Production"
+# Load directly from the UC Volume path — no model registry needed
+MODEL_PATH = "/Volumes/workspace/default/raincheck/models/hurricane-gas-signal"
 BUY_THRESHOLD = 0.65
 
 FEATURE_COLS = [
@@ -24,7 +22,7 @@ FEATURE_COLS = [
 
 
 def load_model():
-    return mlflow.xgboost.load_model(f"models:/{MODEL_NAME}/{MODEL_STAGE}")
+    return mlflow.xgboost.load_model(MODEL_PATH)
 
 
 def predict(features: dict) -> dict:
