@@ -71,7 +71,7 @@ jobs:
               {"SUPABASE_URL": supabase_url, "SUPABASE_KEY": supabase_key}
           )
 
-          # ── 3. Upload backtest script to DBFS ───────────────────────────
+          # ── 3. Upload backtest script to UC Volume (DBFS write blocked on Free Edition)
           script = textwrap.dedent("""
               import shutil, subprocess, sys, os
               CLONE_DIR = '/tmp/RainCheck'
@@ -85,17 +85,19 @@ jobs:
               print(results.to_string(index=False))
           """).strip()
 
-          httpx.post(f"{host}/api/2.0/dbfs/put", headers=h, json={
-              "path": "dbfs:/tmp/raincheck_backtest.py",
-              "contents": base64.b64encode(script.encode()).decode(),
-              "overwrite": True,
-          }, timeout=30).raise_for_status()
-          print("Backtest script uploaded to DBFS")
+          vol_script_path = "/Volumes/workspace/default/raincheck/scripts/backtest.py"
+          httpx.put(
+              f"{host}/api/2.0/fs/files{vol_script_path}",
+              headers={**h, "Content-Type": "application/octet-stream"},
+              content=script.encode(),
+              timeout=30,
+          ).raise_for_status()
+          print(f"Backtest script uploaded to {vol_script_path}")
 
           # ── 4. Submit backtest run ───────────────────────────────────────
           submit_body = {
               "run_name": "raincheck-backtest",
-              "spark_python_task": {"python_file": "dbfs:/tmp/raincheck_backtest.py"},
+              "spark_python_task": {"python_file": vol_script_path},
           }
           if cluster_cfg:
               submit_body["new_cluster"] = cluster_cfg
