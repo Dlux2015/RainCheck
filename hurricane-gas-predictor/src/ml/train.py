@@ -63,7 +63,9 @@ def train(params: dict | None = None) -> dict:
     auc = roc_auc_score(y_test, probs)
     f1  = f1_score(y_test, (probs >= 0.5).astype(int))
 
-    import mlflow.xgboost
+    import shutil, os, mlflow.xgboost
+    if os.path.exists(MODEL_PATH):
+        shutil.rmtree(MODEL_PATH)
     mlflow.xgboost.save_model(model, MODEL_PATH)
 
     metrics = {"auc": round(auc, 4), "f1": round(f1, 4), "rows": len(X)}
