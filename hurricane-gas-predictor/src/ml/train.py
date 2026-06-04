@@ -1,7 +1,5 @@
-"""Train XGBoost buy-signal model with full MLflow tracking and model registration."""
+"""Train XGBoost buy-signal model and save to UC Volume."""
 
-import mlflow
-import mlflow.xgboost
 import numpy as np
 import xgboost as xgb
 from pyspark.sql import SparkSession
@@ -12,8 +10,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GOLD_PATH = "/Volumes/workspace/default/raincheck/delta/gold/features"
-# Free Edition doesn't have model registry — save directly to a UC Volume path.
-# predict.py loads from this path; retraining overwrites it in-place.
 MODEL_PATH = "/Volumes/workspace/default/raincheck/models/hurricane-gas-signal"
 
 FEATURE_COLS = [
@@ -46,14 +42,11 @@ def load_features(spark: SparkSession) -> tuple[np.ndarray, np.ndarray]:
     return df[FEATURE_COLS].values.astype(float), df[LABEL_COL].values.astype(int)
 
 
-def train(params: dict | None = None) -> str:
-    """Train model, log to MLflow, save to UC Volume, return run_id."""
+def train(params: dict | None = None) -> dict:
+    """Train model, save to UC Volume, return metrics dict."""
     if params is None:
         params = DEFAULT_PARAMS
 
-    # Disable autolog — it internally reads spark.mlflow.modelRegistryUri
-    # which is unavailable on Databricks Free Edition
-    mlflow.xgboost.autolog(disable=True)
     spark = SparkSession.builder.appName("xgb_train").getOrCreate()
     X, y = load_features(spark)
     if len(X) < 10:
@@ -63,24 +56,20 @@ def train(params: dict | None = None) -> str:
         )
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    with mlflow.start_run() as run:
-        mlflow.log_params(params)
+    model = xgb.XGBClassifier(**params)
+    model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 
-        model = xgb.XGBClassifier(**params)
-        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+    probs = model.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, probs)
+    f1  = f1_score(y_test, (probs >= 0.5).astype(int))
 
-        probs = model.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, probs)
-        f1 = f1_score(y_test, (probs >= 0.5).astype(int))
-        mlflow.log_metrics({"auc": auc, "f1": f1})
+    import mlflow.xgboost
+    mlflow.xgboost.save_model(model, MODEL_PATH)
 
-        # Skip mlflow.xgboost.log_model() — it reads spark.mlflow.modelRegistryUri
-        # which is unavailable on Free Edition. Save directly to UC Volume instead.
-        mlflow.xgboost.save_model(model, MODEL_PATH)
-
-        print(f"Run {run.info.run_id} — AUC: {auc:.4f}  F1: {f1:.4f}")
-        print(f"Model saved to {MODEL_PATH}")
-        return run.info.run_id
+    metrics = {"auc": round(auc, 4), "f1": round(f1, 4), "rows": len(X)}
+    print(f"AUC: {auc:.4f}  F1: {f1:.4f}  rows: {len(X)}")
+    print(f"Model saved → {MODEL_PATH}")
+    return metrics
 
 
 if __name__ == "__main__":
