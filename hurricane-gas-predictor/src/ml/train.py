@@ -2,7 +2,6 @@
 
 import mlflow
 import mlflow.xgboost
-from mlflow.models import infer_signature
 import numpy as np
 import xgboost as xgb
 from pyspark.sql import SparkSession
@@ -52,6 +51,9 @@ def train(params: dict | None = None) -> str:
     if params is None:
         params = DEFAULT_PARAMS
 
+    # Disable autolog — it internally reads spark.mlflow.modelRegistryUri
+    # which is unavailable on Databricks Free Edition
+    mlflow.xgboost.autolog(disable=True)
     spark = SparkSession.builder.appName("xgb_train").getOrCreate()
     X, y = load_features(spark)
     if len(X) < 10:
@@ -72,10 +74,8 @@ def train(params: dict | None = None) -> str:
         f1 = f1_score(y_test, (probs >= 0.5).astype(int))
         mlflow.log_metrics({"auc": auc, "f1": f1})
 
-        signature = infer_signature(X_train, model.predict_proba(X_train)[:, 1])
-        # Log to MLflow run for experiment tracking
-        mlflow.xgboost.log_model(model, artifact_path="model", signature=signature)
-        # Save to UC Volume so predict.py can load it without the model registry
+        # Skip mlflow.xgboost.log_model() — it reads spark.mlflow.modelRegistryUri
+        # which is unavailable on Free Edition. Save directly to UC Volume instead.
         mlflow.xgboost.save_model(model, MODEL_PATH)
 
         print(f"Run {run.info.run_id} — AUC: {auc:.4f}  F1: {f1:.4f}")
